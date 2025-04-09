@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Variáveis ajustáveis
 downloads_simultaneos = 4
-arquivo_input = r'CAMINHO'
+arquivo_input = r'CAMINHO'  # Arquivo CSV disponibilizado pela APPLE
 diretorio_output = r'CAMINHO'  # Ajuste o caminho conforme necessário
 arquivo_log = 'log.txt'  # Nome do arquivo de log
 
