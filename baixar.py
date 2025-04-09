@@ -4,6 +4,9 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
+# Exibe mensagem de crédito
+print("joaquina.py Script para baixar arquivos disponibilizados via CSV referente ao retorno de ofício judicial da APPLE, por Joaquim Ferreira.")
+
 # Variáveis ajustáveis
 downloads_simultaneos = 4
 arquivo_input = r'CAMINHO'  # Arquivo CSV disponibilizado pela APPLE
