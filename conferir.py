@@ -4,7 +4,7 @@ import csv
 import datetime
 
 # Exibe mensagem de crédito
-print("joaquina.py Script para verificar integridade dos arquivos baixados via CSV referente ao retorno de ofício judicial da APPLE, por Joaquim Ferreira.")
+print("conferir.py Script para verificar integridade dos arquivos baixados via CSV referente ao retorno de ofício judicial da APPLE, por Joaquim Ferreira.")
 
 # Defina as variáveis para o CSV, diretório e arquivo de log aqui
 ARQUIVO_CSV = 'DOCUMENTO.csv'
