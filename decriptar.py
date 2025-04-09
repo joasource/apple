@@ -1,6 +1,9 @@
 import os
 import subprocess
 
+# Exibe mensagem de crédito
+print("decriptar.py Script para decriptar arquivos disponibilizados via CSV referente ao retorno de ofício judicial da APPLE, por Joaquim Ferreira.")
+
 def descriptografar_arquivo(arquivo_cifrado, senha, diretorio_saida):
     # Define o caminho de saída do arquivo descriptografado
     arquivo_descriptografado = os.path.join(diretorio_saida, os.path.splitext(os.path.basename(arquivo_cifrado))[0])
