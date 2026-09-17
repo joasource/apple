@@ -92,9 +92,9 @@ pulados automaticamente — nada é refeito à toa.
 O código-fonte fica em `apple_toolkit/` (`core.py` é o motor do pipeline,
 `gui.py` é a interface gráfica). Os executáveis são gerados automaticamente
 pelo GitHub Actions (`.github/workflows/release.yml`) a cada tag `vX.Y.Z`
-enviada ao repositório. Os arquivos `baixar.py`, `conferir.py` e
-`decriptar.py` na raiz são os scripts originais, mantidos só como
-referência histórica.
+enviada ao repositório. Os arquivos em `legacy/` (`baixar.py`, `conferir.py`
+e `decriptar.py`) são os scripts originais, mantidos só como referência
+histórica.
 
 Os testes automatizados (`apple_toolkit/tests/`) cobrem o motor do
 pipeline: leitura de CSV, download, verificação de hash e descriptografia
