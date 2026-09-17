@@ -1,4 +1,4 @@
-name: Build Windows Release
+name: Build Release
 
 on:
   push:
@@ -15,7 +15,23 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - name: Determinar versao da release
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
   build-windows:
+    needs: version
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -38,20 +54,76 @@ jobs:
             --distpath dist --workpath build --specpath build `
             apple_toolkit/gui.py
 
-      - name: Determinar versao da release
-        id: ver
-        shell: bash
+      - name: Enviar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/AppleToolkit.exe
+
+  build-linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
+          python -m pip install --upgrade pip
+          pip install -r apple_toolkit/requirements.txt
+          pip install pyinstaller
+
+      - name: Compilar binario Linux
+        run: |
+          pyinstaller --onedir --windowed --name AppleToolkit \
+            --distpath dist --workpath build --specpath build \
+            apple_toolkit/gui.py
+
+      - name: Montar AppDir
+        run: |
+          set -e
+          mkdir -p AppDir/usr/bin
+          cp -r dist/AppleToolkit AppDir/usr/bin/AppleToolkit
+          cp packaging/linux/AppleToolkit.desktop AppDir/AppleToolkit.desktop
+          cp packaging/linux/icon.png AppDir/AppleToolkit.png
+          cp packaging/linux/AppRun AppDir/AppRun
+          chmod +x AppDir/AppRun AppDir/usr/bin/AppleToolkit/AppleToolkit
+
+      - name: Baixar appimagetool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+
+      - name: Gerar AppImage
+        run: |
+          ./appimagetool --appimage-extract-and-run AppDir dist/AppleToolkit-x86_64.AppImage
+
+      - name: Enviar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/AppleToolkit-x86_64.AppImage
+
+  release:
+    needs: [version, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar artefatos
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Publicar release no GitHub
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.version }}
-          name: Apple Toolkit ${{ steps.ver.outputs.version }}
+          tag_name: ${{ needs.version.outputs.version }}
+          name: Apple Toolkit ${{ needs.version.outputs.version }}
           generate_release_notes: true
-          files: dist/AppleToolkit.exe
+          files: |
+            artifacts/windows-exe/AppleToolkit.exe
+            artifacts/linux-appimage/AppleToolkit-x86_64.AppImage

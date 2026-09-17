@@ -35,11 +35,17 @@ de destino.
 O pipeline e seguro para reexecutar: arquivos ja baixados, ja conferidos ou ja
 descriptografados sao detectados e pulados automaticamente.
 
-## Executavel para Windows (release automatica)
+## Executaveis para Windows e Linux (release automatica)
 
 O repositorio tem um workflow do GitHub Actions
-(`.github/workflows/release.yml`) que compila `AppleToolkit.exe` em uma
-maquina Windows e publica como release do GitHub, com o `PyInstaller`.
+(`.github/workflows/release.yml`) que compila, em paralelo:
+
+- `AppleToolkit.exe` — em `windows-latest`, com PyInstaller (`--onefile`).
+- `AppleToolkit-x86_64.AppImage` — em `ubuntu-latest`, com PyInstaller
+  (`--onedir`) empacotado em um AppImage via `appimagetool`
+  (assets de empacotamento em `packaging/linux/`).
+
+Os dois artefatos sao publicados juntos em uma unica release do GitHub.
 
 Para gerar uma nova release:
 
@@ -48,10 +54,16 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Isso dispara o workflow, que compila o `.exe` e anexa a uma nova release com
-o mesmo nome da tag. Tambem e possivel disparar manualmente pela aba
-**Actions → Build Windows Release → Run workflow** no GitHub, informando a
-versao desejada.
+Isso dispara o workflow, que compila os dois executaveis e os anexa a uma
+nova release com o mesmo nome da tag. Tambem e possivel disparar
+manualmente pela aba **Actions → Build Release → Run workflow** no GitHub,
+informando a versao desejada.
 
-O executavel gerado **não** inclui o GnuPG — quem for usar a descriptografia
-precisa ter o Gpg4win instalado separadamente no Windows.
+Nenhum dos dois executaveis inclui o GnuPG — quem for usar a
+descriptografia precisa ter o `gpg` instalado separadamente:
+[Gpg4win](https://gpg4win.org) no Windows, ou o pacote `gnupg` da
+distribuicao no Linux (geralmente ja vem instalado).
+
+No Linux, o AppImage e um arquivo unico: basta dar permissao de execucao
+(`chmod +x AppleToolkit-x86_64.AppImage`) e rodar. Em distribuicoes sem FUSE
+instalado, execute com `./AppleToolkit-x86_64.AppImage --appimage-extract-and-run`.
