@@ -49,25 +49,20 @@ jobs:
           pip install -r apple_toolkit/requirements.txt
           pip install pyinstaller
 
-      - name: Instalar e preparar GnuPG (via Chocolatey) para embutir
+      - name: Baixar e extrair GnuPG para embutir (sem executar instalador)
         run: |
           $ErrorActionPreference = "Stop"
-          Write-Host "Instalando GnuPG via Chocolatey..."
-          choco install gnupg -y --no-progress --limit-output
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "choco install gnupg falhou com exit code $LASTEXITCODE"
+          Write-Host "Baixando binario w32 do GnuPG..."
+          Invoke-WebRequest -Uri "https://gnupg.org/ftp/gcrypt/binary/gnupg-w32-2.4.8_20250514.exe" -OutFile "$PWD\gnupg-w32.exe"
+          Write-Host "Extraindo com 7-Zip (o instalador NUNCA e executado, so descompactado)..."
+          7z x -y "$PWD\gnupg-w32.exe" -o"$PWD\gnupg-extracted" | Out-Null
+          if (-not (Test-Path "$PWD\gnupg-extracted\bin\gpg.exe")) {
+            Write-Error "gpg.exe nao foi encontrado apos a extracao"
             exit 1
           }
-          Write-Host "Instalacao concluida. Procurando gpg.exe..."
-          $gpgExe = Get-ChildItem -Path "C:\Program Files*","C:\ProgramData\chocolatey" -Recurse -Filter "gpg.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $gpgExe) {
-            Write-Error "gpg.exe nao foi encontrado apos a instalacao via choco"
-            exit 1
-          }
-          $binDir = $gpgExe.Directory.FullName
-          Write-Host "GnuPG bin encontrado em: $binDir"
+          Write-Host "Extracao concluida."
           New-Item -ItemType Directory -Force -Path "$PWD\gnupg-bin" | Out-Null
-          Copy-Item -Path "$binDir\*" -Destination "$PWD\gnupg-bin" -Recurse -Force
+          Copy-Item -Path "$PWD\gnupg-extracted\bin\*" -Destination "$PWD\gnupg-bin" -Recurse -Force
           Write-Host "Copia para gnupg-bin concluida."
 
       - name: Compilar executavel Windows
