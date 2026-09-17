@@ -5,6 +5,7 @@
 <h1 align="center">JoaKApple</h1>
 
 <p align="center">
+  <a href="https://github.com/joasource/apple/actions/workflows/ci.yml"><img src="https://github.com/joasource/apple/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
   <a href="https://github.com/joasource/apple/actions/workflows/release.yml"><img src="https://github.com/joasource/apple/actions/workflows/release.yml/badge.svg" alt="Build Release"></a>
   <a href="https://github.com/joasource/apple/releases/latest"><img src="https://img.shields.io/github/v/release/joasource/apple" alt="Última release"></a>
   <img src="https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-0F6B62" alt="Plataformas suportadas">
@@ -93,6 +94,15 @@ pelo GitHub Actions (`.github/workflows/release.yml`) a cada tag `vX.Y.Z`
 enviada ao repositório. Os arquivos `baixar.py`, `conferir.py` e
 `decriptar.py` na raiz são os scripts originais, mantidos só como
 referência histórica.
+
+Os testes automatizados (`apple_toolkit/tests/`) cobrem o motor do
+pipeline: leitura de CSV, download, verificação de hash e descriptografia
+(com um `gpg` real, se disponível no PATH). Rodam a cada push/PR via
+`.github/workflows/ci.yml`. Pra rodar localmente:
+```bash
+pip install -r apple_toolkit/requirements-dev.txt
+pytest apple_toolkit/tests -v
+```
 
 O ícone do app fica em `packaging/`, gerado por `packaging/make_icon.py`
 (requer `pip install Pillow`): `linux/icon.png` é reaproveitado no

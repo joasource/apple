@@ -9,3 +9,4 @@ GPG_log.txt
 apple_toolkit_log.txt
 .venv/
 venv/
+.pytest_cache/
