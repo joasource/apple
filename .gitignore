@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+*.log
+log.txt
+GPG_log.txt
+apple_toolkit_log.txt
+.venv/
+venv/

@@ -1,0 +1,57 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versao da release (ex.: v1.0.0)"
+        required: true
+        default: "v0.0.0-manual"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apple_toolkit/requirements.txt
+          pip install pyinstaller
+
+      - name: Compilar executavel Windows
+        run: |
+          pyinstaller --onefile --windowed --name AppleToolkit `
+            --distpath dist --workpath build --specpath build `
+            apple_toolkit/gui.py
+
+      - name: Determinar versao da release
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publicar release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: Apple Toolkit ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          files: dist/AppleToolkit.exe
