@@ -48,9 +48,26 @@ jobs:
           pip install -r apple_toolkit/requirements.txt
           pip install pyinstaller
 
+      - name: Baixar e preparar GnuPG (Gpg4win) para embutir
+        run: |
+          Invoke-WebRequest -Uri "https://files.gpg4win.org/gpg4win-5.1.0.exe" -OutFile gpg4win-installer.exe
+          Set-Content -Path gpg4win-silent.ini -Value "[gpg4win]`ninst_gpgol = false`ninst_gpgex = false`ninst_kleopatra = false`ninst_gpa = false"
+          Start-Process -FilePath .\gpg4win-installer.exe -ArgumentList "/S /C=gpg4win-silent.ini /D=C:\gpg4win" -Wait
+          $gpgExe = Get-ChildItem -Path "C:\gpg4win" -Recurse -Filter "gpg.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $gpgExe) {
+            Write-Error "gpg.exe nao foi encontrado apos a instalacao silenciosa do Gpg4win"
+            exit 1
+          }
+          $binDir = $gpgExe.Directory.FullName
+          Write-Host "GnuPG bin encontrado em: $binDir"
+          New-Item -ItemType Directory -Force -Path gnupg-bin | Out-Null
+          Copy-Item -Path "$binDir\*" -Destination gnupg-bin -Recurse -Force
+
       - name: Compilar executavel Windows
         run: |
           pyinstaller --onefile --windowed --name JoaKApple `
+            --collect-data customtkinter `
+            --add-binary "${{ github.workspace }}\gnupg-bin;gnupg-bin" `
             --distpath dist --workpath build --specpath build `
             apple_toolkit/gui.py
 
@@ -81,6 +98,7 @@ jobs:
       - name: Compilar binario Linux
         run: |
           pyinstaller --onedir --windowed --name JoaKApple \
+            --collect-data customtkinter \
             --distpath dist --workpath build --specpath build \
             apple_toolkit/gui.py
 

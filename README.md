@@ -14,10 +14,10 @@ Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
 
 - O **arquivo CSV** que a Apple te mandou (a lista com os links dos arquivos).
 - A **senha** que a Apple forneceu, se você for descriptografar os arquivos `.gpg`.
-- Para a etapa de descriptografar, o programa **GnuPG** instalado no seu
-  computador:
-  - Windows: instale o [Gpg4win](https://gpg4win.org) (só isso, não precisa mexer em mais nada).
-  - Linux: normalmente já vem instalado; se não vier, instale o pacote `gnupg` da sua distribuição.
+- Para a etapa de descriptografar, o programa precisa do **GnuPG**:
+  - **Windows**: já vem embutido no `JoaKApple.exe` — não precisa instalar nada.
+  - **Linux**: usa o `gnupg` do sistema, que normalmente já vem instalado; se
+    não vier, instale o pacote `gnupg` da sua distribuição.
 
 ## Como baixar e abrir o programa
 
@@ -64,8 +64,9 @@ pulados automaticamente — nada é refeito à toa.
 
 ## Se der algum problema
 
-- **"gpg não foi encontrado no PATH"**: falta instalar o Gpg4win (Windows)
-  ou o `gnupg` (Linux) — veja "O que você precisa antes de começar".
+- **"gpg não foi encontrado no PATH"**: no Windows isso não deveria acontecer
+  (o GnuPG vem embutido); no Linux, instale o pacote `gnupg` da sua
+  distribuição.
 - **"Hash inválido"** num arquivo: ele baixou incompleto ou corrompido.
   Apague o arquivo da pasta de destino e rode o programa de novo só com
   "Baixar" e "Verificar" marcados.

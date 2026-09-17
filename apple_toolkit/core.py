@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -43,8 +45,28 @@ class PipelineError(Exception):
     """Erro fatal que impede o pipeline de iniciar (config invalida, gpg ausente etc.)."""
 
 
+def _bundled_gpg_path() -> Optional[Path]:
+    """Caminho do gpg embutido no executavel (PyInstaller), se houver.
+
+    So o build do Windows embute um GnuPG portatil em ``gnupg-bin/`` ao lado
+    do executavel; no Linux o GnuPG do sistema (quase sempre ja instalado)
+    continua sendo usado via PATH.
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if not base:
+        return None
+    name = "gpg.exe" if os.name == "nt" else "gpg"
+    candidate = Path(base) / "gnupg-bin" / name
+    return candidate if candidate.is_file() else None
+
+
+def _gpg_executable() -> str:
+    bundled = _bundled_gpg_path()
+    return str(bundled) if bundled else "gpg"
+
+
 def check_gpg_available() -> bool:
-    return shutil.which("gpg") is not None
+    return _bundled_gpg_path() is not None or shutil.which("gpg") is not None
 
 
 def _resolve_column(fieldnames: list[str], aliases: list[str]) -> Optional[str]:
@@ -223,7 +245,7 @@ def _decrypt(
 ) -> bool:
     decrypted_path.parent.mkdir(parents=True, exist_ok=True)
     comando = [
-        "gpg",
+        _gpg_executable(),
         "--batch",
         "--yes",
         "--pinentry-mode",
