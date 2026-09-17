@@ -34,6 +34,7 @@ Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
 
 Baixe a versão do seu sistema na página de releases:
 **https://github.com/joasource/apple/releases**
+(o que mudou em cada versão está no [CHANGELOG](CHANGELOG.md))
 
 - **Windows**: baixe `JoaKApple.exe` e dê dois cliques para abrir.
   - O Windows pode mostrar um aviso azul ("O Windows protegeu o computador").
