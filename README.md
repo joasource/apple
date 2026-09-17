@@ -1,70 +1,84 @@
 # JoaKApple
 
-Toolkit para baixar, verificar e descriptografar retorno de ofícios
-judiciais da Apple: baixa os arquivos listados no CSV disponibilizado,
-confere o hash SHA256 de cada um e, por fim, descriptografa os arquivos
-`.gpg` com a senha fornecida pela Apple.
+Programa para processar o retorno que a Apple manda em resposta a um
+ofício judicial: ele **baixa** os arquivos, **confere** se cada um baixou
+certinho (hash SHA256) e **descriptografa** os arquivos `.gpg` usando a
+senha que a Apple forneceu.
+
+Você pode rodar as três etapas juntas ou escolher só as que precisa (por
+exemplo, só conferir arquivos que já foram baixados antes).
 
 Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
 
-## Estrutura
+## O que você precisa antes de começar
 
-- `apple_toolkit/core.py` — motor do pipeline (download com retomada e
-  retries, verificacao de hash, descriptografia via GPG, log com timestamp).
-- `apple_toolkit/gui.py` — interface grafica (Tkinter, sem dependencias
-  externas alem do `requests`).
-- `baixar.py`, `conferir.py`, `decriptar.py` — scripts originais, mantidos
-  apenas como referencia histórica; o `apple_toolkit` os substitui.
+- O **arquivo CSV** que a Apple te mandou (a lista com os links dos arquivos).
+- A **senha** que a Apple forneceu, se você for descriptografar os arquivos `.gpg`.
+- Para a etapa de descriptografar, o programa **GnuPG** instalado no seu
+  computador:
+  - Windows: instale o [Gpg4win](https://gpg4win.org) (só isso, não precisa mexer em mais nada).
+  - Linux: normalmente já vem instalado; se não vier, instale o pacote `gnupg` da sua distribuição.
 
-## Uso (GUI)
+## Como baixar e abrir o programa
 
-Pre-requisitos: Python 3.10+ e, para a etapa de descriptografia, o
-[Gpg4win](https://gpg4win.org) instalado (o `gpg.exe` precisa estar no PATH).
+Baixe a versão do seu sistema na página de releases:
+**https://github.com/joasource/apple/releases**
 
-```bash
-pip install -r apple_toolkit/requirements.txt
-python apple_toolkit/gui.py
-```
+- **Windows**: baixe `JoaKApple.exe` e dê dois cliques para abrir.
+  - O Windows pode mostrar um aviso azul ("O Windows protegeu o computador").
+    Isso acontece porque o programa não tem certificado pago da Microsoft,
+    não porque tem algo de errado. Clique em **Mais informações** e depois em
+    **Executar assim mesmo**.
+- **Linux**: baixe `JoaKApple-x86_64.AppImage`, dê permissão de execução e rode:
+  ```bash
+  chmod +x JoaKApple-x86_64.AppImage
+  ./JoaKApple-x86_64.AppImage
+  ```
+  Se aparecer erro relacionado a FUSE, rode assim:
+  ```bash
+  ./JoaKApple-x86_64.AppImage --appimage-extract-and-run
+  ```
 
-Na janela, informe o CSV da Apple, a pasta de destino e a senha do GPG, ajuste
-o numero de downloads simultaneos se quiser, e clique em **Iniciar**. Os
-arquivos baixados ficam na pasta escolhida; os descriptografados vao para a
-subpasta `decriptado/` (o arquivo `.gpg` original e preservado). Um log com
-data/hora de cada etapa e gravado em `joakapple_log.txt` dentro da pasta
-de destino.
+## Como usar
 
-O pipeline e seguro para reexecutar: arquivos ja baixados, ja conferidos ou ja
-descriptografados sao detectados e pulados automaticamente.
+1. Abra o programa.
+2. Em **Arquivo CSV da Apple**, clique em Selecionar e escolha o CSV que a Apple te enviou.
+3. Em **Pasta de destino**, escolha onde os arquivos vão ser salvos.
+4. Se for descriptografar, preencha a **Senha GPG** com a senha que a Apple forneceu.
+5. Em **Etapas do pipeline**, marque o que você quer que rode:
+   - **Baixar** — baixa os arquivos do CSV.
+   - **Verificar** — confere se o hash de cada arquivo bate com o informado pela Apple.
+   - **Descriptografar** — usa a senha para abrir os arquivos `.gpg`.
 
-## Executaveis para Windows e Linux (release automatica)
+   Pode marcar as três, só uma, ou duas — o botão mostra a combinação escolhida.
+6. Clique em **Iniciar** e acompanhe a lista de arquivos e o log na tela.
 
-O repositorio tem um workflow do GitHub Actions
-(`.github/workflows/release.yml`) que compila, em paralelo:
+Ao final, na pasta de destino você vai encontrar:
+- Os arquivos baixados (como a Apple mandou, ainda `.gpg` se estiverem criptografados).
+- Uma subpasta `decriptado/` com os arquivos já descriptografados.
+- Um arquivo `joakapple_log.txt` com o histórico de cada etapa (data e hora).
 
-- `JoaKApple.exe` — em `windows-latest`, com PyInstaller (`--onefile`).
-- `JoaKApple-x86_64.AppImage` — em `ubuntu-latest`, com PyInstaller
-  (`--onedir`) empacotado em um AppImage via `appimagetool`
-  (assets de empacotamento em `packaging/linux/`).
+Rodar o programa de novo em cima da mesma pasta é seguro: arquivos que já
+foram baixados, já conferidos ou já descriptografados são identificados e
+pulados automaticamente — nada é refeito à toa.
 
-Os dois artefatos sao publicados juntos em uma unica release do GitHub.
+## Se der algum problema
 
-Para gerar uma nova release:
+- **"gpg não foi encontrado no PATH"**: falta instalar o Gpg4win (Windows)
+  ou o `gnupg` (Linux) — veja "O que você precisa antes de começar".
+- **"Hash inválido"** num arquivo: ele baixou incompleto ou corrompido.
+  Apague o arquivo da pasta de destino e rode o programa de novo só com
+  "Baixar" e "Verificar" marcados.
+- **Senha incorreta**: o programa avisa qual arquivo falhou ao descriptografar;
+  confira a senha exatamente como a Apple enviou (maiúsculas/minúsculas importam).
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
+---
 
-Isso dispara o workflow, que compila os dois executaveis e os anexa a uma
-nova release com o mesmo nome da tag. Tambem e possivel disparar
-manualmente pela aba **Actions → Build Release → Run workflow** no GitHub,
-informando a versao desejada.
+### Para quem for mexer no código
 
-Nenhum dos dois executaveis inclui o GnuPG — quem for usar a
-descriptografia precisa ter o `gpg` instalado separadamente:
-[Gpg4win](https://gpg4win.org) no Windows, ou o pacote `gnupg` da
-distribuicao no Linux (geralmente ja vem instalado).
-
-No Linux, o AppImage e um arquivo unico: basta dar permissao de execucao
-(`chmod +x JoaKApple-x86_64.AppImage`) e rodar. Em distribuicoes sem FUSE
-instalado, execute com `./JoaKApple-x86_64.AppImage --appimage-extract-and-run`.
+O código-fonte fica em `apple_toolkit/` (`core.py` é o motor do pipeline,
+`gui.py` é a interface gráfica). Os executáveis são gerados automaticamente
+pelo GitHub Actions (`.github/workflows/release.yml`) a cada tag `vX.Y.Z`
+enviada ao repositório. Os arquivos `baixar.py`, `conferir.py` e
+`decriptar.py` na raiz são os scripts originais, mantidos só como
+referência histórica.
