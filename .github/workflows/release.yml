@@ -123,6 +123,10 @@ jobs:
         with:
           tag_name: ${{ needs.version.outputs.version }}
           name: Apple Toolkit ${{ needs.version.outputs.version }}
+          body: |
+            Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple.
+
+            Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
           generate_release_notes: true
           files: |
             artifacts/windows-exe/AppleToolkit.exe
