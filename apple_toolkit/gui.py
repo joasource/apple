@@ -25,7 +25,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -202,7 +202,6 @@ class JoaKAppleGUI(ctk.CTk):
         ctk.set_appearance_mode("light")
 
         self.title(f"{APP_TITLE} v{APP_VERSION}")
-        self.geometry("1040x820")
         self.minsize(880, 620)
         self.configure(fg_color=BG_APP)
 

@@ -4,6 +4,15 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.4.1] - 2026-09-17
+
+### Corrigido
+- Janela principal usava um tamanho fixo em pixels (`1040x820`) que não
+  se adaptava a fontes/DPI diferentes, cortando o botão "Gerar Termo de
+  Recebimento…" no rodapé até o usuário esticar a janela manualmente.
+  A janela agora calcula o próprio tamanho a partir do conteúdo, então
+  nada fica escondido independente da tela.
+
 ## [1.4.0] - 2026-09-17
 
 ### Adicionado
