@@ -50,9 +50,18 @@ jobs:
 
       - name: Baixar e preparar GnuPG (Gpg4win) para embutir
         run: |
-          Invoke-WebRequest -Uri "https://files.gpg4win.org/gpg4win-5.1.0.exe" -OutFile gpg4win-installer.exe
-          Set-Content -Path gpg4win-silent.ini -Value "[gpg4win]`ninst_gpgol = false`ninst_gpgex = false`ninst_kleopatra = false`ninst_gpa = false"
-          Start-Process -FilePath .\gpg4win-installer.exe -ArgumentList "/S /C=gpg4win-silent.ini /D=C:\gpg4win" -Wait
+          $ErrorActionPreference = "Stop"
+          Write-Host "Baixando instalador do Gpg4win..."
+          Invoke-WebRequest -Uri "https://files.gpg4win.org/gpg4win-5.1.0.exe" -OutFile "$PWD\gpg4win-installer.exe"
+          Write-Host "Download concluido. Iniciando instalacao silenciosa..."
+          $proc = Start-Process -FilePath "$PWD\gpg4win-installer.exe" -ArgumentList "/S /D=C:\gpg4win" -PassThru
+          $finished = $proc.WaitForExit(600000)
+          if (-not $finished) {
+            Write-Error "Instalador do Gpg4win nao terminou em 10 minutos (provavel travamento). Abortando."
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "Instalador concluido com exit code $($proc.ExitCode)."
           $gpgExe = Get-ChildItem -Path "C:\gpg4win" -Recurse -Filter "gpg.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $gpgExe) {
             Write-Error "gpg.exe nao foi encontrado apos a instalacao silenciosa do Gpg4win"
@@ -60,8 +69,9 @@ jobs:
           }
           $binDir = $gpgExe.Directory.FullName
           Write-Host "GnuPG bin encontrado em: $binDir"
-          New-Item -ItemType Directory -Force -Path gnupg-bin | Out-Null
-          Copy-Item -Path "$binDir\*" -Destination gnupg-bin -Recurse -Force
+          New-Item -ItemType Directory -Force -Path "$PWD\gnupg-bin" | Out-Null
+          Copy-Item -Path "$binDir\*" -Destination "$PWD\gnupg-bin" -Recurse -Force
+          Write-Host "Copia para gnupg-bin concluida."
 
       - name: Compilar executavel Windows
         run: |
