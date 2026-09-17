@@ -68,8 +68,10 @@ jobs:
       - name: Compilar executavel Windows
         run: |
           pyinstaller --onefile --windowed --name JoaKApple `
+            --icon "${{ github.workspace }}\packaging\windows\icon.ico" `
             --collect-data customtkinter `
             --add-binary "${{ github.workspace }}\gnupg-bin;gnupg-bin" `
+            --add-data "${{ github.workspace }}\packaging\linux\icon.png;." `
             --distpath dist --workpath build --specpath build `
             apple_toolkit/gui.py
 
@@ -100,7 +102,9 @@ jobs:
       - name: Compilar binario Linux
         run: |
           pyinstaller --onedir --windowed --name JoaKApple \
+            --icon "${{ github.workspace }}/packaging/linux/icon.png" \
             --collect-data customtkinter \
+            --add-data "${{ github.workspace }}/packaging/linux/icon.png:." \
             --distpath dist --workpath build --specpath build \
             apple_toolkit/gui.py
 

@@ -1,4 +1,14 @@
-# JoaKApple
+<p align="center">
+  <img src="packaging/linux/icon.png" width="96" height="96" alt="Ícone do JoaKApple">
+</p>
+
+<h1 align="center">JoaKApple</h1>
+
+<p align="center">
+  <a href="https://github.com/joasource/apple/actions/workflows/release.yml"><img src="https://github.com/joasource/apple/actions/workflows/release.yml/badge.svg" alt="Build Release"></a>
+  <a href="https://github.com/joasource/apple/releases/latest"><img src="https://img.shields.io/github/v/release/joasource/apple" alt="Última release"></a>
+  <img src="https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-0F6B62" alt="Plataformas suportadas">
+</p>
 
 Programa para processar o retorno que a Apple manda em resposta a um
 ofício judicial: ele **baixa** os arquivos, **confere** se cada um baixou
@@ -83,3 +93,11 @@ pelo GitHub Actions (`.github/workflows/release.yml`) a cada tag `vX.Y.Z`
 enviada ao repositório. Os arquivos `baixar.py`, `conferir.py` e
 `decriptar.py` na raiz são os scripts originais, mantidos só como
 referência histórica.
+
+O ícone do app fica em `packaging/`, gerado por `packaging/make_icon.py`
+(requer `pip install Pillow`): `linux/icon.png` é reaproveitado no
+AppImage, na janela em tempo de execução (`gui.py`) e neste README;
+`windows/icon.ico` é a versão multi-resolução usada no `.exe`;
+`icon-1024.png` é uma cópia em alta resolução pra material de divulgação.
+Pra mudar o design (cor, monograma), edite `make_icon.py` e rode
+`python packaging/make_icon.py` de novo — ele regenera os três arquivos.

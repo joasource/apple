@@ -10,6 +10,7 @@ Autor: Joaquim Ferreira Silva Neto <joaquimfsneto@gmail.com>
 from __future__ import annotations
 
 import queue
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -23,6 +24,13 @@ APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
 APP_VERSION = "1.2.1"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
+
+
+def _icon_image_path() -> Path | None:
+    """Caminho do PNG do icone (embutido pelo PyInstaller ou no repo em dev)."""
+    base = getattr(sys, "_MEIPASS", None)
+    candidate = Path(base) / "icon.png" if base else Path(__file__).resolve().parent.parent / "packaging" / "linux" / "icon.png"
+    return candidate if candidate.is_file() else None
 
 ACCENT = "#0F6B62"
 ACCENT_HOVER = "#0A4A45"
@@ -120,6 +128,14 @@ class JoaKAppleGUI(ctk.CTk):
         self.geometry("1040x820")
         self.minsize(880, 620)
         self.configure(fg_color=BG_APP)
+
+        icon_path = _icon_image_path()
+        if icon_path is not None:
+            try:
+                self._icon_photo = tk.PhotoImage(file=str(icon_path))
+                self.iconphoto(True, self._icon_photo)
+            except tk.TclError:
+                pass
 
         self.update_queue: queue.Queue = queue.Queue()
         self.log_queue: queue.Queue = queue.Queue()
