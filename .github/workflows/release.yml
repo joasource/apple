@@ -94,6 +94,7 @@ jobs:
           pyinstaller --onefile --windowed --name JoaKApple `
             --icon "${{ github.workspace }}\packaging\windows\icon.ico" `
             --collect-data customtkinter `
+            --collect-data docx `
             --add-binary "${{ github.workspace }}\gnupg-bin;gnupg-bin" `
             --add-data "${{ github.workspace }}\packaging\linux\icon.png;." `
             --distpath dist --workpath build --specpath build `
@@ -128,6 +129,7 @@ jobs:
           pyinstaller --onedir --windowed --name JoaKApple \
             --icon "${{ github.workspace }}/packaging/linux/icon.png" \
             --collect-data customtkinter \
+            --collect-data docx \
             --add-data "${{ github.workspace }}/packaging/linux/icon.png:." \
             --distpath dist --workpath build --specpath build \
             apple_toolkit/gui.py

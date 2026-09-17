@@ -169,7 +169,7 @@ def load_entries(csv_path: Path) -> list[FileEntry]:
     return entries
 
 
-def _sha256_of_file(path: Path) -> str:
+def sha256_of_file(path: Path) -> str:
     hasher = hashlib.sha256()
     with path.open("rb") as fh:
         while True:
@@ -333,7 +333,7 @@ def process_entry(
         if entry.sha256_expected:
             entry.status = "conferindo"
             on_update(entry)
-            hash_calculado = _sha256_of_file(dest)
+            hash_calculado = sha256_of_file(dest)
             if hash_calculado.lower() != entry.sha256_expected.lower():
                 entry.status = "hash_invalido"
                 entry.message = (

@@ -4,13 +4,24 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançado]
+## [1.4.0] - 2026-09-17
 
 ### Adicionado
 - Verificação no workflow de release: a tag `vX.Y.Z` só publica se
   `APP_VERSION` (em `gui.py`) e a primeira entrada deste CHANGELOG
   baterem com a versão da tag. Evita repetir o bug de versão exibida
   ficando desatualizada em relação à tag publicada.
+- Botão "Gerar Termo de Recebimento…" na GUI, que abre uma janela para
+  preencher os dados manuais do Termo de Recebimento e Identificação de
+  Evidência Telemática (processo, PIC/inquérito, responsável, etc.) e
+  gera o texto já com quantidade de arquivos, volume total e a tabela de
+  hashes SHA-256 calculados automaticamente a partir dos arquivos
+  recebidos na pasta de destino.
+- Duas formas de exportar o termo gerado: botão "Copiar" (texto simples
+  + HTML formatado na área de transferência, para colar com Arial 12 e
+  espaçamento 1,5 direto no Word/LibreOffice) e botão "Salvar .docx"
+  (gera um arquivo Word já pronto, com títulos, negrito, tabela nativa
+  e a mesma formatação Arial 12/espaçamento 1,5).
 
 ## [1.3.0] - 2026-09-17
 

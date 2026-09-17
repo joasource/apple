@@ -9,9 +9,11 @@ Autor: Joaquim Ferreira Silva Neto <joaquimfsneto@gmail.com>
 
 from __future__ import annotations
 
+import os
 import queue
 import sys
 import threading
+from datetime import datetime
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -19,10 +21,11 @@ from tkinter import filedialog, messagebox, ttk
 import customtkinter as ctk
 
 import core
+import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -65,6 +68,80 @@ STEP_META = {
     "verify": ("2", "Verificar", "Confere o hash SHA256 de cada arquivo contra o valor informado pela Apple."),
     "decrypt": ("3", "Descriptografar", "Usa a senha GPG para descriptografar os arquivos .gpg já conferidos."),
 }
+
+
+def _build_cf_html(html_fragment: str) -> bytes:
+    """Monta o payload no formato CF_HTML exigido pelo clipboard do Windows
+    (cabecalho com offsets em bytes + marcadores StartFragment/EndFragment)."""
+    header_template = (
+        "Version:0.9\r\n"
+        "StartHTML:{start_html:010d}\r\n"
+        "EndHTML:{end_html:010d}\r\n"
+        "StartFragment:{start_fragment:010d}\r\n"
+        "EndFragment:{end_fragment:010d}\r\n"
+    )
+    prefix = "<html><body>\r\n<!--StartFragment-->"
+    suffix = "<!--EndFragment-->\r\n</body></html>"
+
+    start_html = len(header_template.format(start_html=0, end_html=0, start_fragment=0, end_fragment=0).encode("utf-8"))
+    start_fragment = start_html + len(prefix.encode("utf-8"))
+    end_fragment = start_fragment + len(html_fragment.encode("utf-8"))
+    end_html = end_fragment + len(suffix.encode("utf-8"))
+
+    header = header_template.format(
+        start_html=start_html, end_html=end_html,
+        start_fragment=start_fragment, end_fragment=end_fragment,
+    )
+    return (header + prefix + html_fragment + suffix).encode("utf-8")
+
+
+def _set_windows_html_clipboard(plain_text: str, html_fragment: str) -> None:
+    """Coloca texto simples (CF_UNICODETEXT) e HTML (formato "HTML Format") na area de
+    transferencia do Windows via ctypes, para que o Word cole com a formatacao (negrito,
+    titulos, tabela) em vez de markdown cru. So deve ser chamada com os.name == "nt"."""
+    import ctypes
+    from ctypes import wintypes
+
+    GMEM_MOVEABLE = 0x0002
+    CF_UNICODETEXT = 13
+
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    user32.OpenClipboard.argtypes = [wintypes.HWND]
+    user32.OpenClipboard.restype = wintypes.BOOL
+    user32.EmptyClipboard.restype = wintypes.BOOL
+    user32.CloseClipboard.restype = wintypes.BOOL
+    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+    user32.SetClipboardData.restype = wintypes.HANDLE
+    user32.RegisterClipboardFormatW.argtypes = [wintypes.LPCWSTR]
+    user32.RegisterClipboardFormatW.restype = wintypes.UINT
+
+    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalLock.restype = wintypes.LPVOID
+    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+
+    def put(fmt, data: bytes):
+        handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(data))
+        if not handle:
+            raise OSError("GlobalAlloc falhou ao reservar memoria para a area de transferencia.")
+        ptr = kernel32.GlobalLock(handle)
+        ctypes.memmove(ptr, data, len(data))
+        kernel32.GlobalUnlock(handle)
+        if not user32.SetClipboardData(fmt, handle):
+            raise OSError("SetClipboardData falhou.")
+
+    if not user32.OpenClipboard(None):
+        raise OSError("Nao foi possivel abrir a area de transferencia do Windows.")
+    try:
+        user32.EmptyClipboard()
+        put(CF_UNICODETEXT, (plain_text + "\0").encode("utf-16-le"))
+        cf_html = user32.RegisterClipboardFormatW("HTML Format")
+        put(cf_html, _build_cf_html(html_fragment) + b"\0")
+    finally:
+        user32.CloseClipboard()
 
 
 class StepCard(ctk.CTkFrame):
@@ -315,6 +392,11 @@ class JoaKAppleGUI(ctk.CTk):
         ctk.CTkLabel(
             footer, text=f"v{APP_VERSION}", text_color=TEXT_SECONDARY, font=ctk.CTkFont(family="DejaVu Sans", size=10),
         ).pack(side="right")
+        ctk.CTkButton(
+            footer, text="Gerar Termo de Recebimento…", command=self._open_report_window,
+            fg_color="#FFFFFF", hover_color=BORDER_SOFT, text_color=TEXT_PRIMARY,
+            border_width=1, border_color=BORDER, corner_radius=8, height=30,
+        ).pack(side="left")
 
         self._update_step_state()
 
@@ -547,6 +629,262 @@ class JoaKAppleGUI(ctk.CTk):
         self.log_text.insert("end", message + "\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
+
+    # -------------------------------------------------------------- relatorio
+
+    def _report_entry(self, parent, label, var, row, col, columnspan=1):
+        wrap = ctk.CTkFrame(parent, fg_color="transparent")
+        wrap.grid(row=row, column=col, columnspan=columnspan, sticky="we", padx=6, pady=6)
+        ctk.CTkLabel(
+            wrap, text=label.upper(), text_color=TEXT_SECONDARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=10, weight="bold"),
+        ).pack(anchor="w")
+        ctk.CTkEntry(
+            wrap, textvariable=var, fg_color="#FFFFFF", border_color=BORDER,
+            text_color=TEXT_PRIMARY,
+        ).pack(fill="x", pady=(4, 0))
+
+    def _open_report_window(self):
+        now = datetime.now()
+
+        win = ctk.CTkToplevel(self)
+        win.title("Gerar Termo de Recebimento de Evidência")
+        win.geometry("760x780")
+        win.configure(fg_color=BG_APP)
+        win.transient(self)
+
+        win.vars = {
+            "numero_processo": tk.StringVar(),
+            "numero_pic": tk.StringVar(),
+            "orgao_execucao": tk.StringVar(),
+            "data": tk.StringVar(value=now.strftime("%d/%m/%Y")),
+            "hora": tk.StringVar(value=now.strftime("%H:%M")),
+            "responsavel": tk.StringVar(),
+            "matricula": tk.StringVar(),
+            "recebido_portal": tk.BooleanVar(value=False),
+            "recebido_email": tk.BooleanVar(value=False),
+            "procedimento_referenciado": tk.StringVar(),
+            "id_documento": tk.StringVar(),
+            "disponibiliza_original": tk.BooleanVar(value=False),
+            "disponibiliza_processada": tk.BooleanVar(value=False),
+        }
+
+        scroll = ctk.CTkScrollableFrame(win, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=16, pady=(16, 8))
+        scroll.columnconfigure((0, 1), weight=1)
+
+        ctk.CTkLabel(
+            scroll, text="1. IDENTIFICAÇÃO DO CASO", text_color=TEXT_PRIMARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=13, weight="bold"),
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 0))
+        self._report_entry(scroll, "Número do Processo Judicial", win.vars["numero_processo"], 1, 0)
+        self._report_entry(scroll, "PIC/Inquérito", win.vars["numero_pic"], 1, 1)
+        self._report_entry(scroll, "Órgão de Execução", win.vars["orgao_execucao"], 2, 0, columnspan=2)
+
+        ctk.CTkLabel(
+            scroll, text="2. DADOS DA RECEPÇÃO", text_color=TEXT_PRIMARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=13, weight="bold"),
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=6, pady=(14, 0))
+        self._report_entry(scroll, "Data", win.vars["data"], 4, 0)
+        self._report_entry(scroll, "Hora", win.vars["hora"], 4, 1)
+        self._report_entry(scroll, "Responsável", win.vars["responsavel"], 5, 0)
+        self._report_entry(scroll, "Matrícula", win.vars["matricula"], 5, 1)
+
+        recebimento_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        recebimento_row.grid(row=6, column=0, columnspan=2, sticky="w", padx=6, pady=(2, 0))
+        ctk.CTkLabel(
+            recebimento_row, text="FORMA DE RECEBIMENTO", text_color=TEXT_SECONDARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=10, weight="bold"),
+        ).pack(anchor="w")
+        ctk.CTkCheckBox(
+            recebimento_row, text="Portal do Provedor", variable=win.vars["recebido_portal"],
+            fg_color=ACCENT, text_color=TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(4, 0))
+        ctk.CTkCheckBox(
+            recebimento_row, text="E-mail Oficial", variable=win.vars["recebido_email"],
+            fg_color=ACCENT, text_color=TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(4, 0))
+
+        ctk.CTkLabel(
+            scroll, text="3. ESPECIFICAÇÕES TÉCNICAS", text_color=TEXT_PRIMARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=13, weight="bold"),
+        ).grid(row=7, column=0, columnspan=2, sticky="w", padx=6, pady=(14, 0))
+
+        hash_status_var = tk.StringVar(value="Nenhum arquivo carregado — rode o pipeline (ou carregue um CSV) antes de gerar o termo para preencher volume/quantidade/hashes automaticamente.")
+        ctk.CTkLabel(
+            scroll, textvariable=hash_status_var, text_color=TEXT_SECONDARY, wraplength=680,
+            justify="left", font=ctk.CTkFont(family="DejaVu Sans", size=11),
+        ).grid(row=8, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 0))
+
+        self._report_entry(scroll, "Procedimento referenciado (autos)", win.vars["procedimento_referenciado"], 9, 0)
+        self._report_entry(scroll, "ID do documento", win.vars["id_documento"], 9, 1)
+
+        ctk.CTkLabel(
+            scroll, text="5. DISPONIBILIZAÇÃO", text_color=TEXT_PRIMARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=13, weight="bold"),
+        ).grid(row=10, column=0, columnspan=2, sticky="w", padx=6, pady=(14, 0))
+        disp_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        disp_row.grid(row=11, column=0, columnspan=2, sticky="w", padx=6, pady=(2, 0))
+        ctk.CTkCheckBox(
+            disp_row, text="Cópia da Aquisição Forense Original (Dados Brutos + Hashes + Metadados)",
+            variable=win.vars["disponibiliza_original"], fg_color=ACCENT, text_color=TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(4, 0))
+        ctk.CTkCheckBox(
+            disp_row, text="Cópia Processada/Indexada",
+            variable=win.vars["disponibiliza_processada"], fg_color=ACCENT, text_color=TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(4, 0))
+
+        # --- area fixa: gerar / copiar / preview ---
+        bottom = ctk.CTkFrame(win, fg_color="transparent")
+        bottom.pack(fill="both", expand=False, padx=16, pady=(0, 16))
+
+        buttons_row = ctk.CTkFrame(bottom, fg_color="transparent")
+        buttons_row.pack(fill="x")
+
+        generate_button = ctk.CTkButton(
+            buttons_row, text="Gerar termo", fg_color=ACCENT, hover_color=ACCENT_HOVER, text_color="#FFFFFF",
+            corner_radius=8, height=34,
+            command=lambda: self._generate_report_text(win),
+        )
+        generate_button.pack(side="left")
+
+        copy_button = ctk.CTkButton(
+            buttons_row, text="Copiar", state="disabled", fg_color="#FFFFFF", hover_color=BORDER_SOFT,
+            text_color=TEXT_PRIMARY, border_width=1, border_color=BORDER, corner_radius=8, height=34,
+            command=lambda: self._copy_report_text(win),
+        )
+        copy_button.pack(side="left", padx=8)
+
+        docx_button = ctk.CTkButton(
+            buttons_row, text="Salvar .docx", fg_color="#FFFFFF", hover_color=BORDER_SOFT,
+            text_color=TEXT_PRIMARY, border_width=1, border_color=BORDER, corner_radius=8, height=34,
+            command=lambda: self._save_report_docx(win),
+        )
+        docx_button.pack(side="left")
+
+        output_box = ctk.CTkTextbox(
+            bottom, fg_color="#FFFFFF", text_color=TEXT_PRIMARY, font=("Consolas", 11),
+            wrap="word", height=220, border_width=1, border_color=BORDER_SOFT,
+        )
+        output_box.pack(fill="both", expand=True, pady=(10, 0))
+
+        win.hash_rows = []
+        win.hash_status_var = hash_status_var
+        win.generate_button = generate_button
+        win.copy_button = copy_button
+        win.docx_button = docx_button
+        win.output_box = output_box
+
+        entries = self.entries
+        output_dir = self.output_dir_var.get().strip()
+        if entries and output_dir:
+            hash_status_var.set("Calculando hashes dos arquivos recebidos…")
+            result_queue: queue.Queue = queue.Queue()
+            threading.Thread(
+                target=lambda: result_queue.put(report.compute_hash_rows(entries, Path(output_dir))),
+                daemon=True,
+            ).start()
+            self._poll_report_hash_queue(win, result_queue)
+
+    def _poll_report_hash_queue(self, win, result_queue: "queue.Queue"):
+        if not win.winfo_exists():
+            return
+        try:
+            rows = result_queue.get_nowait()
+        except queue.Empty:
+            win.after(150, self._poll_report_hash_queue, win, result_queue)
+            return
+
+        win.hash_rows = rows
+        faltando = [row.file_name for row in rows if row.sha256 is None]
+        total_volume = report.humanize_bytes(sum(row.size_bytes for row in rows))
+        status = f"{len(rows)} arquivo(s) encontrado(s), volume total {total_volume}."
+        if faltando:
+            status += f" Não encontrados em disco: {', '.join(faltando)}."
+        win.hash_status_var.set(status)
+
+    def _build_report_data(self, win) -> report.ReportData:
+        v = win.vars
+        return report.ReportData(
+            numero_processo=v["numero_processo"].get().strip(),
+            numero_pic=v["numero_pic"].get().strip(),
+            orgao_execucao=v["orgao_execucao"].get().strip(),
+            data=v["data"].get().strip(),
+            hora=v["hora"].get().strip(),
+            responsavel=v["responsavel"].get().strip(),
+            matricula=v["matricula"].get().strip(),
+            recebido_portal=v["recebido_portal"].get(),
+            recebido_email=v["recebido_email"].get(),
+            procedimento_referenciado=v["procedimento_referenciado"].get().strip(),
+            id_documento=v["id_documento"].get().strip(),
+            disponibiliza_original=v["disponibiliza_original"].get(),
+            disponibiliza_processada=v["disponibiliza_processada"].get(),
+            hash_rows=win.hash_rows,
+        )
+
+    def _generate_report_text(self, win):
+        data = self._build_report_data(win)
+        text = report.render_report(data)
+        win.output_box.configure(state="normal")
+        win.output_box.delete("1.0", "end")
+        win.output_box.insert("1.0", text)
+        win.copy_button.configure(state="normal")
+
+    def _copy_report_text(self, win):
+        text = win.output_box.get("1.0", "end-1c")
+        data = self._build_report_data(win)
+        html_fragment = report.render_report_html(data)
+
+        copied_formatted = False
+        if os.name == "nt":
+            try:
+                _set_windows_html_clipboard(text, html_fragment)
+                copied_formatted = True
+            except Exception as exc:  # noqa: BLE001 - nunca deixar a copia quebrar por causa disso
+                self.log_queue.put(
+                    f"[relatorio] Falha ao copiar formatado para o Windows, copiando texto simples: {exc}"
+                )
+
+        if not copied_formatted:
+            win.clipboard_clear()
+            win.clipboard_append(text)
+            try:
+                win.clipboard_append(html_fragment, type="text/html")
+            except tk.TclError:
+                pass
+
+        original_text = win.copy_button.cget("text")
+        win.copy_button.configure(text="Copiado!")
+        win.after(1500, lambda: win.copy_button.configure(text=original_text))
+
+    def _save_report_docx(self, win):
+        data = self._build_report_data(win)
+        path = filedialog.asksaveasfilename(
+            title="Salvar Termo de Recebimento",
+            defaultextension=".docx",
+            filetypes=[("Documento Word", "*.docx")],
+            initialfile="termo_recebimento.docx",
+        )
+        if not path:
+            return
+
+        try:
+            report.build_docx(data, Path(path))
+        except ImportError:
+            messagebox.showerror(
+                APP_TITLE,
+                "A biblioteca 'python-docx' não está instalada.\n\n"
+                "Rode: pip install -r apple_toolkit/requirements.txt",
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror(APP_TITLE, f"Não foi possível salvar o .docx:\n{exc}")
+            return
+
+        original_text = win.docx_button.cget("text")
+        win.docx_button.configure(text="Salvo!")
+        win.after(1500, lambda: win.docx_button.configure(text=original_text))
+        messagebox.showinfo(APP_TITLE, f"Termo salvo em:\n{path}")
 
 
 def main():
