@@ -50,7 +50,7 @@ jobs:
 
       - name: Compilar executavel Windows
         run: |
-          pyinstaller --onefile --windowed --name AppleToolkit `
+          pyinstaller --onefile --windowed --name JoaKApple `
             --distpath dist --workpath build --specpath build `
             apple_toolkit/gui.py
 
@@ -58,7 +58,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe
-          path: dist/AppleToolkit.exe
+          path: dist/JoaKApple.exe
 
   build-linux:
     needs: version
@@ -80,7 +80,7 @@ jobs:
 
       - name: Compilar binario Linux
         run: |
-          pyinstaller --onedir --windowed --name AppleToolkit \
+          pyinstaller --onedir --windowed --name JoaKApple \
             --distpath dist --workpath build --specpath build \
             apple_toolkit/gui.py
 
@@ -88,11 +88,11 @@ jobs:
         run: |
           set -e
           mkdir -p AppDir/usr/bin
-          cp -r dist/AppleToolkit AppDir/usr/bin/AppleToolkit
-          cp packaging/linux/AppleToolkit.desktop AppDir/AppleToolkit.desktop
-          cp packaging/linux/icon.png AppDir/AppleToolkit.png
+          cp -r dist/JoaKApple AppDir/usr/bin/JoaKApple
+          cp packaging/linux/JoaKApple.desktop AppDir/JoaKApple.desktop
+          cp packaging/linux/icon.png AppDir/JoaKApple.png
           cp packaging/linux/AppRun AppDir/AppRun
-          chmod +x AppDir/AppRun AppDir/usr/bin/AppleToolkit/AppleToolkit
+          chmod +x AppDir/AppRun AppDir/usr/bin/JoaKApple/JoaKApple
 
       - name: Baixar appimagetool
         run: |
@@ -101,13 +101,13 @@ jobs:
 
       - name: Gerar AppImage
         run: |
-          ./appimagetool --appimage-extract-and-run AppDir dist/AppleToolkit-x86_64.AppImage
+          ./appimagetool --appimage-extract-and-run AppDir dist/JoaKApple-x86_64.AppImage
 
       - name: Enviar artefato
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: dist/AppleToolkit-x86_64.AppImage
+          path: dist/JoaKApple-x86_64.AppImage
 
   release:
     needs: [version, build-windows, build-linux]
@@ -122,12 +122,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.version }}
-          name: Apple Toolkit ${{ needs.version.outputs.version }}
+          name: JoaKApple ${{ needs.version.outputs.version }}
           body: |
             Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple.
 
             Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
           generate_release_notes: true
           files: |
-            artifacts/windows-exe/AppleToolkit.exe
-            artifacts/linux-appimage/AppleToolkit-x86_64.AppImage
+            artifacts/windows-exe/JoaKApple.exe
+            artifacts/linux-appimage/JoaKApple-x86_64.AppImage

@@ -1,8 +1,9 @@
-# Apple Toolkit — Oficio Judicial
+# JoaKApple
 
-Ferramenta para processar o retorno da Apple a um oficio judicial: baixa os
-arquivos listados no CSV disponibilizado, confere o hash SHA256 de cada um e,
-por fim, descriptografa os arquivos `.gpg` com a senha fornecida pela Apple.
+Toolkit para baixar, verificar e descriptografar retorno de ofícios
+judiciais da Apple: baixa os arquivos listados no CSV disponibilizado,
+confere o hash SHA256 de cada um e, por fim, descriptografa os arquivos
+`.gpg` com a senha fornecida pela Apple.
 
 Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
 
@@ -29,7 +30,7 @@ Na janela, informe o CSV da Apple, a pasta de destino e a senha do GPG, ajuste
 o numero de downloads simultaneos se quiser, e clique em **Iniciar**. Os
 arquivos baixados ficam na pasta escolhida; os descriptografados vao para a
 subpasta `decriptado/` (o arquivo `.gpg` original e preservado). Um log com
-data/hora de cada etapa e gravado em `apple_toolkit_log.txt` dentro da pasta
+data/hora de cada etapa e gravado em `joakapple_log.txt` dentro da pasta
 de destino.
 
 O pipeline e seguro para reexecutar: arquivos ja baixados, ja conferidos ou ja
@@ -40,8 +41,8 @@ descriptografados sao detectados e pulados automaticamente.
 O repositorio tem um workflow do GitHub Actions
 (`.github/workflows/release.yml`) que compila, em paralelo:
 
-- `AppleToolkit.exe` — em `windows-latest`, com PyInstaller (`--onefile`).
-- `AppleToolkit-x86_64.AppImage` — em `ubuntu-latest`, com PyInstaller
+- `JoaKApple.exe` — em `windows-latest`, com PyInstaller (`--onefile`).
+- `JoaKApple-x86_64.AppImage` — em `ubuntu-latest`, com PyInstaller
   (`--onedir`) empacotado em um AppImage via `appimagetool`
   (assets de empacotamento em `packaging/linux/`).
 
@@ -65,5 +66,5 @@ descriptografia precisa ter o `gpg` instalado separadamente:
 distribuicao no Linux (geralmente ja vem instalado).
 
 No Linux, o AppImage e um arquivo unico: basta dar permissao de execucao
-(`chmod +x AppleToolkit-x86_64.AppImage`) e rodar. Em distribuicoes sem FUSE
-instalado, execute com `./AppleToolkit-x86_64.AppImage --appimage-extract-and-run`.
+(`chmod +x JoaKApple-x86_64.AppImage`) e rodar. Em distribuicoes sem FUSE
+instalado, execute com `./JoaKApple-x86_64.AppImage --appimage-extract-and-run`.

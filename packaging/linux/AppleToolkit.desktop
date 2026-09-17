@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Apple Toolkit
-Comment=Baixar, conferir hash e descriptografar retorno de oficio judicial da Apple
-Exec=AppleToolkit
-Icon=AppleToolkit
-Categories=Utility;
-Terminal=false

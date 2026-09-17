@@ -1,8 +1,8 @@
 """
-Apple Legal Process Toolkit - interface grafica.
+JoaKApple - interface grafica.
 
-Baixa, confere o hash SHA256 e descriptografa (GPG) os arquivos disponibilizados
-pela Apple em resposta a oficio judicial.
+Toolkit para baixar, verificar e descriptografar retorno de oficios
+judiciais da Apple.
 
 Autor: Joaquim Ferreira Silva Neto <joaquimfsneto@gmail.com>
 """
@@ -17,7 +17,8 @@ from tkinter import filedialog, messagebox, ttk
 
 import core
 
-APP_TITLE = "Apple Toolkit - Oficio Judicial"
+APP_TITLE = "JoaKApple"
+APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
 APP_VERSION = "1.0.0"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  <joaquimfsneto@gmail.com>"
 
@@ -33,12 +34,12 @@ STATUS_LABELS = {
 }
 
 
-class AppleToolkitGUI(tk.Tk):
+class JoaKAppleGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_TITLE} v{APP_VERSION}")
-        self.geometry("900x640")
-        self.minsize(760, 480)
+        self.geometry("900x680")
+        self.minsize(760, 520)
 
         self.update_queue: queue.Queue = queue.Queue()
         self.log_queue: queue.Queue = queue.Queue()
@@ -61,6 +62,11 @@ class AppleToolkitGUI(tk.Tk):
 
     def _build_widgets(self):
         pad = {"padx": 8, "pady": 4}
+
+        header = ttk.Frame(self)
+        header.pack(fill="x", padx=8, pady=(8, 0))
+        ttk.Label(header, text=APP_TITLE, font=("TkDefaultFont", 14, "bold")).pack(anchor="w")
+        ttk.Label(header, text=APP_DESCRIPTION, foreground="#666").pack(anchor="w")
 
         form = ttk.Frame(self)
         form.pack(fill="x", **pad)
@@ -285,7 +291,7 @@ class AppleToolkitGUI(tk.Tk):
 
 
 def main():
-    app = AppleToolkitGUI()
+    app = JoaKAppleGUI()
     app.mainloop()
 
 

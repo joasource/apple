@@ -1,5 +1,5 @@
 """
-Apple Legal Process Toolkit - motor do pipeline (baixar, conferir hash, decriptar).
+JoaKApple - motor do pipeline (baixar, conferir hash, decriptar).
 
 Autor: Joaquim Ferreira Silva Neto <joaquimfsneto@gmail.com>
 
@@ -93,7 +93,7 @@ class PipelineConfig:
         self.csv_path = Path(self.csv_path)
         self.output_dir = Path(self.output_dir)
         if self.log_path is None:
-            self.log_path = self.output_dir / "apple_toolkit_log.txt"
+            self.log_path = self.output_dir / "joakapple_log.txt"
         else:
             self.log_path = Path(self.log_path)
 
