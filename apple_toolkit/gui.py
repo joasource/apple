@@ -52,6 +52,8 @@ class JoaKAppleGUI(tk.Tk):
         self.output_dir_var = tk.StringVar()
         self.passphrase_var = tk.StringVar()
         self.workers_var = tk.IntVar(value=4)
+        self.download_var = tk.BooleanVar(value=True)
+        self.verify_var = tk.BooleanVar(value=True)
         self.decrypt_var = tk.BooleanVar(value=True)
         self.show_pass_var = tk.BooleanVar(value=False)
 
@@ -82,9 +84,10 @@ class JoaKAppleGUI(tk.Tk):
         ttk.Label(form, text="Senha GPG:").grid(row=2, column=0, sticky="w")
         self.pass_entry = ttk.Entry(form, textvariable=self.passphrase_var, width=40, show="*")
         self.pass_entry.grid(row=2, column=1, sticky="w")
-        ttk.Checkbutton(
+        self.show_pass_check = ttk.Checkbutton(
             form, text="mostrar", variable=self.show_pass_var, command=self._toggle_password
-        ).grid(row=2, column=1, sticky="w", padx=(300, 0))
+        )
+        self.show_pass_check.grid(row=2, column=1, sticky="w", padx=(300, 0))
 
         options = ttk.Frame(form)
         options.grid(row=3, column=1, sticky="w", pady=(4, 0))
@@ -92,9 +95,21 @@ class JoaKAppleGUI(tk.Tk):
         ttk.Spinbox(options, from_=1, to=16, width=4, textvariable=self.workers_var).pack(
             side="left", padx=(4, 16)
         )
-        ttk.Checkbutton(options, text="Descriptografar (.gpg)", variable=self.decrypt_var).pack(
-            side="left"
+
+        steps = ttk.LabelFrame(self, text="Etapas do pipeline — ative quantas quiser")
+        steps.pack(fill="x", padx=8, pady=(4, 4))
+        self.download_check = ttk.Checkbutton(
+            steps, text="Baixar", variable=self.download_var, command=self._update_step_state
         )
+        self.download_check.pack(side="left", padx=(8, 16), pady=6)
+        self.verify_check = ttk.Checkbutton(
+            steps, text="Verificar", variable=self.verify_var, command=self._update_step_state
+        )
+        self.verify_check.pack(side="left", padx=16, pady=6)
+        self.decrypt_check = ttk.Checkbutton(
+            steps, text="Descriptografar", variable=self.decrypt_var, command=self._update_step_state
+        )
+        self.decrypt_check.pack(side="left", padx=16, pady=6)
 
         form.columnconfigure(1, weight=1)
 
@@ -135,8 +150,28 @@ class JoaKAppleGUI(tk.Tk):
         footer.pack(fill="x", padx=8, pady=(0, 6))
         ttk.Label(footer, text=AUTHOR_LINE, foreground="#555").pack(side="left")
 
+        self._update_step_state()
+
     def _toggle_password(self):
         self.pass_entry.configure(show="" if self.show_pass_var.get() else "*")
+
+    def _update_step_state(self):
+        decrypt_on = self.decrypt_var.get()
+        self.pass_entry.configure(state="normal" if decrypt_on else "disabled")
+        self.show_pass_check.configure(state="normal" if decrypt_on else "disabled")
+
+        labels = []
+        if self.download_var.get():
+            labels.append("Baixar")
+        if self.verify_var.get():
+            labels.append("Verificar")
+        if self.decrypt_var.get():
+            labels.append("Descriptografar")
+
+        if labels:
+            self.start_button.configure(text="Iniciar — " + " + ".join(labels), state="normal")
+        else:
+            self.start_button.configure(text="Selecione ao menos uma etapa", state="disabled")
 
     def _pick_csv(self):
         path = filedialog.askopenfilename(
@@ -163,6 +198,10 @@ class JoaKAppleGUI(tk.Tk):
             messagebox.showerror(APP_TITLE, "Selecione a pasta de destino.")
             return
 
+        if not (self.download_var.get() or self.verify_var.get() or self.decrypt_var.get()):
+            messagebox.showerror(APP_TITLE, "Selecione ao menos uma etapa (Baixar, Verificar ou Descriptografar).")
+            return
+
         try:
             self.entries = core.load_entries(Path(csv_path))
         except core.PipelineError as exc:
@@ -187,6 +226,8 @@ class JoaKAppleGUI(tk.Tk):
             output_dir=Path(output_dir),
             passphrase=self.passphrase_var.get(),
             max_workers=max(1, self.workers_var.get()),
+            download=self.download_var.get(),
+            verify=self.verify_var.get(),
             decrypt=self.decrypt_var.get(),
         )
 
@@ -203,6 +244,9 @@ class JoaKAppleGUI(tk.Tk):
         self.cancel_event.clear()
         self.start_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
+        self.download_check.configure(state="disabled")
+        self.verify_check.configure(state="disabled")
+        self.decrypt_check.configure(state="disabled")
 
         self.worker_thread = threading.Thread(
             target=self._run_worker, args=(config,), daemon=True
@@ -268,8 +312,7 @@ class JoaKAppleGUI(tk.Tk):
                 f"Cancelados: {item.cancelados}  "
                 f"({item.elapsed_seconds:.1f}s)"
             )
-            self.start_button.configure(state="normal")
-            self.cancel_button.configure(state="disabled")
+            self._reenable_controls()
             if item.erros or item.hash_invalido:
                 messagebox.showwarning(
                     APP_TITLE,
@@ -279,9 +322,15 @@ class JoaKAppleGUI(tk.Tk):
             else:
                 messagebox.showinfo(APP_TITLE, "Pipeline finalizado com sucesso.")
         elif isinstance(item, Exception):
-            self.start_button.configure(state="normal")
-            self.cancel_button.configure(state="disabled")
+            self._reenable_controls()
             messagebox.showerror(APP_TITLE, f"Erro fatal no pipeline:\n{item}")
+
+    def _reenable_controls(self):
+        self.cancel_button.configure(state="disabled")
+        self.download_check.configure(state="normal")
+        self.verify_check.configure(state="normal")
+        self.decrypt_check.configure(state="normal")
+        self._update_step_state()
 
     def _append_log(self, message: str):
         self.log_text.configure(state="normal")

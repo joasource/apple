@@ -86,6 +86,8 @@ class PipelineConfig:
     output_dir: Path
     passphrase: str = ""
     max_workers: int = 4
+    download: bool = True
+    verify: bool = True
     decrypt: bool = True
     log_path: Optional[Path] = None
 
@@ -267,7 +269,7 @@ def process_entry(
     dest = config.output_dir / entry.file_name
     decrypted_path = config.decrypted_dir / Path(entry.file_name).stem
 
-    if entry.is_encrypted and decrypted_path.exists():
+    if config.decrypt and entry.is_encrypted and decrypted_path.exists():
         entry.status = "concluido"
         entry.message = "ja existia descriptografado"
         on_update(entry)
@@ -278,44 +280,54 @@ def process_entry(
         on_update(entry)
         return
 
-    # --- download (com retomada: pula se ja existe) ---
-    if dest.exists():
-        entry.message = "arquivo ja baixado"
-    else:
-        entry.status = "baixando"
+    # --- download (etapa opcional, com retomada: pula se ja existe) ---
+    if config.download:
+        if dest.exists():
+            entry.message = "arquivo ja baixado"
+        else:
+            entry.status = "baixando"
+            on_update(entry)
+            log(f"Iniciando download de {entry.file_name}")
+            ok = _download(session, entry, dest, cancel_event, log)
+            if cancel_event.is_set():
+                entry.status = "cancelado"
+                on_update(entry)
+                return
+            if not ok:
+                entry.status = "erro"
+                on_update(entry)
+                log(f"[{entry.file_name}] ERRO: {entry.message}")
+                return
+            log(f"Download de {entry.file_name} concluido")
+    elif not dest.exists():
+        entry.status = "erro"
+        entry.message = "arquivo nao encontrado (etapa de download desmarcada)"
         on_update(entry)
-        log(f"Iniciando download de {entry.file_name}")
-        ok = _download(session, entry, dest, cancel_event, log)
-        if cancel_event.is_set():
-            entry.status = "cancelado"
-            on_update(entry)
-            return
-        if not ok:
-            entry.status = "erro"
-            on_update(entry)
-            log(f"[{entry.file_name}] ERRO: {entry.message}")
-            return
-        log(f"Download de {entry.file_name} concluido")
+        log(f"[{entry.file_name}] ERRO: {entry.message}")
+        return
 
-    # --- verificacao de hash ---
-    if entry.sha256_expected:
-        entry.status = "conferindo"
-        on_update(entry)
-        hash_calculado = _sha256_of_file(dest)
-        if hash_calculado.lower() != entry.sha256_expected.lower():
-            entry.status = "hash_invalido"
-            entry.message = (
-                f"hash esperado {entry.sha256_expected} != calculado {hash_calculado}"
-            )
+    # --- verificacao de hash (etapa opcional) ---
+    if config.verify:
+        if entry.sha256_expected:
+            entry.status = "conferindo"
             on_update(entry)
-            log(f"[{entry.file_name}] HASH DIVERGENTE: {entry.message}")
-            return
-        log(f"Hash de {entry.file_name} confere")
+            hash_calculado = _sha256_of_file(dest)
+            if hash_calculado.lower() != entry.sha256_expected.lower():
+                entry.status = "hash_invalido"
+                entry.message = (
+                    f"hash esperado {entry.sha256_expected} != calculado {hash_calculado}"
+                )
+                on_update(entry)
+                log(f"[{entry.file_name}] HASH DIVERGENTE: {entry.message}")
+                return
+            log(f"Hash de {entry.file_name} confere")
+        else:
+            log(f"[{entry.file_name}] sem hash no CSV, verificacao pulada")
     else:
-        log(f"[{entry.file_name}] sem hash no CSV, verificacao pulada")
+        log(f"[{entry.file_name}] verificacao de hash desmarcada, etapa pulada")
 
-    # --- descriptografia ---
-    if entry.is_encrypted and config.decrypt:
+    # --- descriptografia (etapa opcional) ---
+    if config.decrypt and entry.is_encrypted:
         entry.status = "decriptando"
         on_update(entry)
         ok = _decrypt(entry, dest, decrypted_path, config.passphrase, log)
