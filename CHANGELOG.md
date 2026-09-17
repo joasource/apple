@@ -4,7 +4,7 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançado]
+## [1.3.0] - 2026-09-17
 
 ### Adicionado
 - Ícone próprio do app (paleta da GUI: verde-azulado + creme), embutido no
@@ -13,6 +13,7 @@ seguem [SemVer](https://semver.org/lang/pt-BR/).
 - Badges de build/testes/release no README.
 - Suíte de testes automatizados para o motor do pipeline (`core.py`) e
   workflow de CI rodando a cada push/PR.
+- Este CHANGELOG.
 
 ## [1.2.1] - 2026-09-17
 
