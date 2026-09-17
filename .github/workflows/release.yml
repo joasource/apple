@@ -20,6 +20,9 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Determinar versao da release
         id: ver
         shell: bash
@@ -29,6 +32,27 @@ jobs:
           else
             echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Validar que APP_VERSION e CHANGELOG batem com a tag
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -e
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          GUI_VERSION=$(grep -oP '(?<=^APP_VERSION = ")[^"]+' apple_toolkit/gui.py)
+          if [ "$GUI_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::APP_VERSION em apple_toolkit/gui.py e '$GUI_VERSION', mas a tag publicada e 'v$TAG_VERSION'. Atualize APP_VERSION antes de fazer a tag."
+            exit 1
+          fi
+
+          CHANGELOG_VERSION=$(grep -oP '(?<=^## \[)[^\]]+' CHANGELOG.md | head -n1)
+          if [ "$CHANGELOG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::A primeira entrada do CHANGELOG.md e '$CHANGELOG_VERSION', mas a tag publicada e 'v$TAG_VERSION'. Adicione a secao '## [$TAG_VERSION] - AAAA-MM-DD' antes de fazer a tag."
+            exit 1
+          fi
+
+          echo "Versao $TAG_VERSION confere em APP_VERSION e no CHANGELOG."
 
   build-windows:
     needs: version

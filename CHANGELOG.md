@@ -4,6 +4,14 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+- Verificação no workflow de release: a tag `vX.Y.Z` só publica se
+  `APP_VERSION` (em `gui.py`) e a primeira entrada deste CHANGELOG
+  baterem com a versão da tag. Evita repetir o bug de versão exibida
+  ficando desatualizada em relação à tag publicada.
+
 ## [1.3.0] - 2026-09-17
 
 ### Adicionado
