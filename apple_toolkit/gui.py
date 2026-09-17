@@ -21,7 +21,7 @@ import core
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.1"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 ACCENT = "#0F6B62"
@@ -117,7 +117,7 @@ class JoaKAppleGUI(ctk.CTk):
         ctk.set_appearance_mode("light")
 
         self.title(f"{APP_TITLE} v{APP_VERSION}")
-        self.geometry("1040x760")
+        self.geometry("1040x820")
         self.minsize(880, 620)
         self.configure(fg_color=BG_APP)
 
@@ -151,6 +151,10 @@ class JoaKAppleGUI(ctk.CTk):
             header, text=APP_DESCRIPTION, text_color=TEXT_SECONDARY,
             font=ctk.CTkFont(family="DejaVu Sans", size=12),
         ).pack(anchor="w")
+        ctk.CTkLabel(
+            header, text=AUTHOR_LINE, text_color=TEXT_SECONDARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=10),
+        ).pack(anchor="w", pady=(4, 0))
 
         # --- Config card ---
         config_card = ctk.CTkFrame(
@@ -279,21 +283,19 @@ class JoaKAppleGUI(ctk.CTk):
         log_card.pack_propagate(False)
         ctk.CTkLabel(
             log_card, text="LOG", text_color="#B7B2A6", fg_color=LOG_HEADER_BG,
+            corner_radius=10,
             font=ctk.CTkFont(family="DejaVu Sans", size=10, weight="bold"), anchor="w", height=32,
         ).pack(fill="x")
         self.log_text = ctk.CTkTextbox(
             log_card, fg_color=LOG_BG, text_color=LOG_TEXT, font=("Consolas", 11),
-            wrap="word", activate_scrollbars=True,
+            wrap="word", activate_scrollbars=True, corner_radius=0,
         )
-        self.log_text.pack(fill="both", expand=True, padx=6, pady=6)
+        self.log_text.pack(fill="both", expand=True)
         self.log_text.configure(state="disabled")
 
         # --- Footer ---
         footer = ctk.CTkFrame(self, fg_color="transparent")
         footer.pack(fill="x", padx=20, pady=(0, 12))
-        ctk.CTkLabel(
-            footer, text=AUTHOR_LINE, text_color=TEXT_SECONDARY, font=ctk.CTkFont(family="DejaVu Sans", size=10),
-        ).pack(side="left")
         ctk.CTkLabel(
             footer, text=f"v{APP_VERSION}", text_color=TEXT_SECONDARY, font=ctk.CTkFont(family="DejaVu Sans", size=10),
         ).pack(side="right")
