@@ -22,6 +22,10 @@ exemplo, só conferir arquivos que já foram baixados antes).
 
 Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Janela principal do JoaKApple: seleção do CSV da Apple e da pasta de destino, senha GPG, as três etapas do pipeline (Baixar/Verificar/Descriptografar) e a lista de arquivos com log ao lado." width="760">
+</p>
+
 ## O que você precisa antes de começar
 
 - O **arquivo CSV** que a Apple te mandou (a lista com os links dos arquivos).
