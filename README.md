@@ -5,9 +5,9 @@
 <h1 align="center">JoaKApple</h1>
 
 <p align="center">
-  <a href="https://github.com/joasource/apple/actions/workflows/ci.yml"><img src="https://github.com/joasource/apple/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
-  <a href="https://github.com/joasource/apple/actions/workflows/release.yml"><img src="https://github.com/joasource/apple/actions/workflows/release.yml/badge.svg" alt="Build Release"></a>
-  <a href="https://github.com/joasource/apple/releases/latest"><img src="https://img.shields.io/github/v/release/joasource/apple" alt="Última release"></a>
+  <a href="https://github.com/joasource/JoaKApple/actions/workflows/ci.yml"><img src="https://github.com/joasource/JoaKApple/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/joasource/JoaKApple/actions/workflows/release.yml"><img src="https://github.com/joasource/JoaKApple/actions/workflows/release.yml/badge.svg" alt="Build Release"></a>
+  <a href="https://github.com/joasource/JoaKApple/releases/latest"><img src="https://img.shields.io/github/v/release/joasource/JoaKApple" alt="Última release"></a>
   <img src="https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-0F6B62" alt="Plataformas suportadas">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licença-GPL--3.0-0F6B62" alt="Licença GPL-3.0"></a>
 </p>
@@ -38,7 +38,7 @@ Autor: Joaquim Ferreira Silva Neto — joaquimfsneto@gmail.com
 ## Como baixar e abrir o programa
 
 Baixe a versão do seu sistema na página de releases:
-**https://github.com/joasource/apple/releases**
+**https://github.com/joasource/JoaKApple/releases**
 (o que mudou em cada versão está no [CHANGELOG](CHANGELOG.md))
 
 - **Windows**: baixe `JoaKApple.exe` e dê dois cliques para abrir.
