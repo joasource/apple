@@ -109,6 +109,43 @@ def test_render_report_fills_real_values_and_marks_checked_boxes():
     assert "(  ) Cópia da Aquisição Forense Original" in text
 
 
+def test_render_report_includes_gpg_password_only_when_flagged():
+    with_flag = report.render_report(
+        report.ReportData(gpg_passphrase="Tr0ub4dor&3", incluir_senha_gpg=True)
+    )
+    assert "**Senha de Descriptografia (GPG):** Tr0ub4dor&3" in with_flag
+
+    without_flag = report.render_report(
+        report.ReportData(gpg_passphrase="Tr0ub4dor&3", incluir_senha_gpg=False)
+    )
+    assert "Senha de Descriptografia" not in without_flag
+
+    flagged_but_empty = report.render_report(
+        report.ReportData(gpg_passphrase="", incluir_senha_gpg=True)
+    )
+    assert "Senha de Descriptografia" not in flagged_but_empty
+
+
+def test_render_report_html_includes_gpg_password_only_when_flagged():
+    with_flag = report.render_report_html(
+        report.ReportData(gpg_passphrase="Tr0ub4dor&3", incluir_senha_gpg=True)
+    )
+    assert "<strong>Senha de Descriptografia (GPG):</strong> Tr0ub4dor&amp;3" in with_flag
+
+    without_flag = report.render_report_html(
+        report.ReportData(gpg_passphrase="Tr0ub4dor&3", incluir_senha_gpg=False)
+    )
+    assert "Senha de Descriptografia" not in without_flag
+
+
+def test_render_report_html_escapes_gpg_password():
+    out = report.render_report_html(
+        report.ReportData(gpg_passphrase="<script>1</script>", incluir_senha_gpg=True)
+    )
+    assert "<script>1</script>" not in out
+    assert "&lt;script&gt;1&lt;/script&gt;" in out
+
+
 def test_render_report_html_uses_arial_12_and_line_spacing_1_5():
     rows = [report.HashRow(file_name="a.pdf", sha256="deadbeef", size_bytes=1024)]
     data = report.ReportData(numero_processo="0001234", recebido_email=True, hash_rows=rows)
@@ -169,7 +206,26 @@ def test_build_docx_generates_a_valid_document_with_arial_12_and_spacing_1_5(tmp
     assert [c.text for c in table.rows[0].cells] == ["Arquivo", "Hash"]
     assert [c.text for c in table.rows[1].cells] == ["a.pdf", "deadbeef"]
     assert [c.text for c in table.rows[2].cells] == ["faltando.zip", "(arquivo nao encontrado no destino)"]
+    assert "Senha de Descriptografia" not in full_text
 
     for paragraph in doc.paragraphs:
         for run in paragraph.runs:
             assert run.font.name == "Arial"
+
+
+def test_build_docx_includes_gpg_password_only_when_flagged(tmp_path):
+    from docx import Document
+
+    data = report.ReportData(gpg_passphrase="Tr0ub4dor&3", incluir_senha_gpg=True)
+    out_path = tmp_path / "termo_com_senha.docx"
+    report.build_docx(data, out_path)
+
+    full_text = "\n".join(p.text for p in Document(str(out_path)).paragraphs)
+    assert "Senha de Descriptografia (GPG): Tr0ub4dor&3" in full_text
+
+    data_sem_flag = report.ReportData(gpg_passphrase="Tr0ub4dor&3", incluir_senha_gpg=False)
+    out_path_sem_flag = tmp_path / "termo_sem_senha.docx"
+    report.build_docx(data_sem_flag, out_path_sem_flag)
+
+    full_text_sem_flag = "\n".join(p.text for p in Document(str(out_path_sem_flag)).paragraphs)
+    assert "Senha de Descriptografia" not in full_text_sem_flag

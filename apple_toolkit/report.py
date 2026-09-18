@@ -112,6 +112,15 @@ class ReportData:
     disponibiliza_original: bool = False
     disponibiliza_processada: bool = False
     hash_rows: list[HashRow] = field(default_factory=list)
+    gpg_passphrase: str = ""
+    incluir_senha_gpg: bool = False
+
+    @property
+    def senha_gpg_a_exibir(self) -> Optional[str]:
+        """Senha a publicar no termo, so' quando a opcao esta marcada e ha algo pra mostrar."""
+        if self.incluir_senha_gpg and self.gpg_passphrase:
+            return self.gpg_passphrase
+        return None
 
 
 def _summary(data: ReportData) -> tuple[str, str, int]:
@@ -145,6 +154,9 @@ def render_report(data: ReportData) -> str:
     else:
         table = "| [nome-do-arquivo] | [hash] |"
 
+    senha_gpg = data.senha_gpg_a_exibir
+    linha_senha_gpg = f"\n- **Senha de Descriptografia (GPG):** {senha_gpg}" if senha_gpg else ""
+
     return f"""# TERMO DE RECEBIMENTO E IDENTIFICAÇÃO DE EVIDÊNCIA TELEMÁTICA
 
 ## 1. IDENTIFICAÇÃO DO CASO
@@ -173,7 +185,7 @@ def render_report(data: ReportData) -> str:
 
 {table}
 
-- **Algoritmo utilizado:** SHA-256
+- **Algoritmo utilizado:** SHA-256{linha_senha_gpg}
 
 ## 4. REGISTRO DE CUSTÓDIA E INTEGRIDADE
 
@@ -215,6 +227,11 @@ def render_report_html(data: ReportData) -> str:
     body_style = f"font-family:{FONT_NAME}, sans-serif; font-size:{FONT_SIZE_PT}pt; line-height:{LINE_SPACING};"
     heading_style = f"font-family:{FONT_NAME}, sans-serif;"
 
+    senha_gpg = data.senha_gpg_a_exibir
+    linha_senha_gpg_html = (
+        f'<p><strong>Senha de Descriptografia (GPG):</strong> {_esc(senha_gpg)}</p>' if senha_gpg else ""
+    )
+
     return f"""<div style="{body_style}">
 <h1 style="{heading_style}">TERMO DE RECEBIMENTO E IDENTIFICAÇÃO DE EVIDÊNCIA TELEMÁTICA</h1>
 
@@ -254,6 +271,7 @@ def render_report_html(data: ReportData) -> str:
 {rows_html}
 </table>
 <p><strong>Algoritmo utilizado:</strong> SHA-256</p>
+{linha_senha_gpg_html}
 
 <h2 style="{heading_style}">4. REGISTRO DE CUSTÓDIA E INTEGRIDADE</h2>
 <p>Os dados acima foram recebidos e processados conforme os requisitos de Integridade (permanência inalterada) e Autenticidade (vínculo ao fato investigado). O material foi imediatamente replicado para backup criptografado institucional.</p>
@@ -351,6 +369,9 @@ def build_docx(data: ReportData, path: Path) -> None:
         for cell, text in zip(cells, (row.file_name, hash_display)):
             run_style(cell.paragraphs[0].add_run(text))
     add_bullet("Algoritmo utilizado", "SHA-256")
+    senha_gpg = data.senha_gpg_a_exibir
+    if senha_gpg:
+        add_bullet("Senha de Descriptografia (GPG)", senha_gpg)
 
     add_heading("4. REGISTRO DE CUSTÓDIA E INTEGRIDADE", 13)
     add_paragraph(

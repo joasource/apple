@@ -4,6 +4,17 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.9.0] - 2026-09-18
+
+### Adicionado
+- GUI: a tela do Termo de Recebimento ganhou o checkbox "Incluir senha
+  do GPG no termo", na Seção 3 (Especificações Técnicas). Nasce marcado
+  automaticamente quando o campo de senha GPG da tela principal já tem
+  valor; se marcada com o campo vazio, mostra aviso e desmarca de
+  volta. Quando ativa, publica a linha "Senha de Descriptografia
+  (GPG): {senha}" logo após "Algoritmo utilizado: SHA-256", nos três
+  formatos de saída (markdown, HTML e .docx).
+
 ## [1.8.0] - 2026-09-18
 
 ### Corrigido

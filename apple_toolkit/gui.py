@@ -27,7 +27,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.9.0"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -912,6 +912,18 @@ class JoaKAppleGUI(ctk.CTk):
             text_color=TEXT_PRIMARY,
         ).pack(fill="x", pady=(4, 0))
 
+    def _on_toggle_incluir_senha_gpg(self, win):
+        """Nunca deixa marcar a opcao sem ter senha nenhuma pra publicar no termo —
+        senha vazia ali seria confuso (pareceria erro em vez de "sem senha")."""
+        if win.vars["incluir_senha_gpg"].get() and not self.passphrase_var.get().strip():
+            win.vars["incluir_senha_gpg"].set(False)
+            messagebox.showwarning(
+                "Senha do GPG em branco",
+                "O campo de senha GPG (tela principal) está em branco — preencha a senha antes "
+                "de incluí-la no termo.",
+                parent=win,
+            )
+
     def _open_report_window(self):
         now = datetime.now()
 
@@ -935,6 +947,9 @@ class JoaKAppleGUI(ctk.CTk):
             "id_documento": tk.StringVar(),
             "disponibiliza_original": tk.BooleanVar(value=False),
             "disponibiliza_processada": tk.BooleanVar(value=False),
+            # Nasce marcada so' se ja houver senha digitada na tela principal — nunca
+            # marcada "no vazio" (ver _on_toggle_incluir_senha_gpg).
+            "incluir_senha_gpg": tk.BooleanVar(value=bool(self.passphrase_var.get().strip())),
         }
 
         scroll = ctk.CTkScrollableFrame(win, fg_color="transparent")
@@ -984,15 +999,27 @@ class JoaKAppleGUI(ctk.CTk):
             justify="left", font=ctk.CTkFont(family="DejaVu Sans", size=11),
         ).grid(row=8, column=0, columnspan=2, sticky="w", padx=6, pady=(4, 0))
 
-        self._report_entry(scroll, "Procedimento referenciado (autos)", win.vars["procedimento_referenciado"], 9, 0)
-        self._report_entry(scroll, "ID do documento", win.vars["id_documento"], 9, 1)
+        gpg_row = ctk.CTkFrame(scroll, fg_color="transparent")
+        gpg_row.grid(row=9, column=0, columnspan=2, sticky="w", padx=6, pady=(8, 0))
+        ctk.CTkCheckBox(
+            gpg_row, text="Incluir senha do GPG no termo", variable=win.vars["incluir_senha_gpg"],
+            fg_color=ACCENT, text_color=TEXT_PRIMARY,
+            command=lambda: self._on_toggle_incluir_senha_gpg(win),
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            gpg_row, text="Adiciona a senha usada na descriptografia (campo acima, na tela principal) à Seção 3 do termo.",
+            text_color=TEXT_SECONDARY, font=ctk.CTkFont(family="DejaVu Sans", size=10),
+        ).pack(anchor="w", padx=(28, 0))
+
+        self._report_entry(scroll, "Procedimento referenciado (autos)", win.vars["procedimento_referenciado"], 10, 0)
+        self._report_entry(scroll, "ID do documento", win.vars["id_documento"], 10, 1)
 
         ctk.CTkLabel(
             scroll, text="5. DISPONIBILIZAÇÃO", text_color=TEXT_PRIMARY,
             font=ctk.CTkFont(family="DejaVu Sans", size=13, weight="bold"),
-        ).grid(row=10, column=0, columnspan=2, sticky="w", padx=6, pady=(14, 0))
+        ).grid(row=11, column=0, columnspan=2, sticky="w", padx=6, pady=(14, 0))
         disp_row = ctk.CTkFrame(scroll, fg_color="transparent")
-        disp_row.grid(row=11, column=0, columnspan=2, sticky="w", padx=6, pady=(2, 0))
+        disp_row.grid(row=12, column=0, columnspan=2, sticky="w", padx=6, pady=(2, 0))
         ctk.CTkCheckBox(
             disp_row, text="Cópia da Aquisição Forense Original (Dados Brutos + Hashes + Metadados)",
             variable=win.vars["disponibiliza_original"], fg_color=ACCENT, text_color=TEXT_PRIMARY,
@@ -1148,6 +1175,8 @@ class JoaKAppleGUI(ctk.CTk):
             disponibiliza_original=v["disponibiliza_original"].get(),
             disponibiliza_processada=v["disponibiliza_processada"].get(),
             hash_rows=win.hash_rows,
+            gpg_passphrase=self.passphrase_var.get(),
+            incluir_senha_gpg=v["incluir_senha_gpg"].get(),
         )
 
     def _generate_report_text(self, win):
