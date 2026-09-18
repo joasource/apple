@@ -9,6 +9,7 @@
   <a href="https://github.com/joasource/apple/actions/workflows/release.yml"><img src="https://github.com/joasource/apple/actions/workflows/release.yml/badge.svg" alt="Build Release"></a>
   <a href="https://github.com/joasource/apple/releases/latest"><img src="https://img.shields.io/github/v/release/joasource/apple" alt="Última release"></a>
   <img src="https://img.shields.io/badge/plataformas-Windows%20%7C%20Linux-0F6B62" alt="Plataformas suportadas">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licença-GPL--3.0-0F6B62" alt="Licença GPL-3.0"></a>
 </p>
 
 Programa para processar o retorno que a Apple manda em resposta a um
@@ -141,3 +142,17 @@ AppImage, na janela em tempo de execução (`gui.py`) e neste README;
 `icon-1024.png` é uma cópia em alta resolução pra material de divulgação.
 Pra mudar o design (cor, monograma), edite `make_icon.py` e rode
 `python packaging/make_icon.py` de novo — ele regenera os três arquivos.
+
+---
+
+## Licença
+
+Este projeto é distribuído sob a [GNU General Public License v3.0](LICENSE)
+(GPL-3.0). Em resumo: você pode usar, estudar, modificar e redistribuir o
+código livremente — inclusive comercialmente —, mas qualquer redistribuição
+(modificada ou não) precisa continuar sob a mesma licença, manter os
+créditos e avisos de copyright, e disponibilizar o código-fonte
+correspondente. Não é permitido incorporar este código em software
+proprietário/fechado.
+
+Copyright (C) 2026 Joaquim Ferreira Silva Neto &lt;joaquimfsneto@gmail.com&gt;

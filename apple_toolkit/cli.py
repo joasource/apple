@@ -9,6 +9,16 @@ X11/Tk instalado (ex.: servidor, container). So existe no build Linux: o
 CHANGELOG/.github/workflows/release.yml.
 
 Autor: Joaquim Ferreira Silva Neto <joaquimfsneto@gmail.com>
+
+Copyright (C) 2026 Joaquim Ferreira Silva Neto <joaquimfsneto@gmail.com>
+
+Este programa e' software livre: voce pode redistribui-lo e/ou modifica-lo
+sob os termos da GNU General Public License, conforme publicada pela Free
+Software Foundation, na versao 3 da licenca, ou (a seu criterio) qualquer
+versao posterior. Este programa e' distribuido na esperanca de ser util,
+mas SEM NENHUMA GARANTIA; nem mesmo a garantia implicita de COMERCIALIZACAO
+ou ADEQUACAO A UM PROPOSITO ESPECIFICO. Veja a GNU General Public License
+para mais detalhes: <https://www.gnu.org/licenses/>.
 """
 
 from __future__ import annotations
