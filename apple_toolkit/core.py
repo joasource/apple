@@ -134,6 +134,72 @@ class ProgressEvent:
     bytes_total: int
 
 
+def format_eta(seconds: float) -> str:
+    """mm:ss (ou hh:mm:ss acima de 1h) para exibir tempo restante estimado."""
+    if seconds != seconds or seconds < 0:  # nan ou negativo
+        seconds = 0
+    seconds = int(seconds)
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
+@dataclass
+class SpeedEstimate:
+    speed_bps: float
+    eta_seconds: Optional[float]
+
+
+class ProgressTracker:
+    """Velocidade media desde o inicio do progresso atual; reinicia quando
+    bytes_done cai (nova tentativa recomecando do zero)."""
+
+    def __init__(self):
+        self._start: Optional[float] = None
+        self._last_bytes = 0
+
+    def update(self, bytes_done: int, bytes_total: int, now: Optional[float] = None) -> SpeedEstimate:
+        if now is None:
+            now = time.monotonic()
+        if self._start is None or bytes_done < self._last_bytes:
+            self._start = now  # primeiro evento, ou nova tentativa reiniciando do zero
+        self._last_bytes = bytes_done
+        elapsed = now - self._start
+        speed = bytes_done / elapsed if elapsed > 0.2 and bytes_done > 0 else 0.0
+
+        eta_seconds: Optional[float] = None
+        if speed > 0 and bytes_total > bytes_done:
+            eta_seconds = (bytes_total - bytes_done) / speed
+
+        return SpeedEstimate(speed_bps=speed, eta_seconds=eta_seconds)
+
+
+def aggregate_progress(
+    events: dict[str, "ProgressEvent"], start_time: float, now: Optional[float] = None
+) -> dict:
+    """Agrega bytes/velocidade/ETA de varios ProgressEvent em andamento (lote inteiro)."""
+    if now is None:
+        now = time.monotonic()
+
+    bytes_done = sum(e.bytes_done for e in events.values())
+    bytes_known = sum(e.bytes_total for e in events.values() if e.bytes_total > 0)
+    elapsed = max(now - start_time, 0.001)
+    speed_bps = bytes_done / elapsed if bytes_done > 0 else 0.0
+
+    eta_seconds: Optional[float] = None
+    if speed_bps > 0 and bytes_known > bytes_done:
+        eta_seconds = (bytes_known - bytes_done) / speed_bps
+
+    return {
+        "bytes_done": bytes_done,
+        "bytes_known": bytes_known,
+        "speed_bps": speed_bps,
+        "eta_seconds": eta_seconds,
+    }
+
+
 @dataclass
 class PipelineSummary:
     total: int = 0

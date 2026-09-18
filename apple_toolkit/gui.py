@@ -27,7 +27,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.7.0"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -88,18 +88,6 @@ STEP_META = {
 }
 
 _LEVEL_TAG_RE = re.compile(r"\[(DEBUG|INFO|OK|WARN|ERROR)\s*\]")
-
-
-def _format_eta(seconds: float) -> str:
-    """mm:ss (ou hh:mm:ss acima de 1h) para exibir tempo restante estimado."""
-    if seconds != seconds or seconds < 0:  # nan ou negativo
-        seconds = 0
-    seconds = int(seconds)
-    hours, rem = divmod(seconds, 3600)
-    minutes, secs = divmod(rem, 60)
-    if hours:
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-    return f"{minutes:02d}:{secs:02d}"
 
 
 def _build_cf_html(html_fragment: str) -> bytes:
@@ -273,8 +261,7 @@ class FileRow(ctk.CTkFrame):
         )
         self.status_label.grid(row=1, column=2, padx=(0, 10), pady=(0, 8), sticky="e")
 
-        self._progress_start: float | None = None
-        self._last_bytes = 0
+        self._tracker = core.ProgressTracker()
 
     def set_enabled(self, enabled: bool):
         state = "normal" if enabled else "disabled"
@@ -287,16 +274,11 @@ class FileRow(ctk.CTkFrame):
         self.progress.set(0)
         self.status_var.set(STATUS_LABELS["pendente"])
         self.status_label.configure(text_color=TEXT_SECONDARY)
-        self._progress_start = None
-        self._last_bytes = 0
+        self._tracker = core.ProgressTracker()
 
     def update_progress(self, bytes_done: int, bytes_total: int):
-        now = time.monotonic()
-        if self._progress_start is None or bytes_done < self._last_bytes:
-            self._progress_start = now  # primeiro evento, ou nova tentativa reiniciando do zero
-        self._last_bytes = bytes_done
-        elapsed = now - self._progress_start
-        speed = bytes_done / elapsed if elapsed > 0.2 and bytes_done > 0 else 0.0
+        estimate = self._tracker.update(bytes_done, bytes_total)
+        speed = estimate.speed_bps
         speed_text = f"{report.humanize_bytes(speed)}/s" if speed > 0 else "calculando velocidade…"
 
         if bytes_total > 0:
@@ -305,7 +287,7 @@ class FileRow(ctk.CTkFrame):
             fraction = min(1.0, bytes_done / bytes_total)
             self.progress.set(fraction)
             pct = int(fraction * 100)
-            eta_text = _format_eta((bytes_total - bytes_done) / speed) if speed > 0 else "--:--"
+            eta_text = core.format_eta(estimate.eta_seconds) if estimate.eta_seconds is not None else "--:--"
             self.status_var.set(
                 f"Baixando {pct}%  ·  {report.humanize_bytes(bytes_done)}/{report.humanize_bytes(bytes_total)}"
                 f"  ·  {speed_text}  ·  ETA {eta_text}"
@@ -473,6 +455,12 @@ class JoaKAppleGUI(ctk.CTk):
         )
         self.progress.set(0)
         self.progress.pack(side="left", fill="x", expand=True, padx=14)
+
+        self.progress_pct_var = tk.StringVar(value="")
+        ctk.CTkLabel(
+            action_bar, textvariable=self.progress_pct_var, text_color=ACCENT, width=36, anchor="e",
+            font=ctk.CTkFont(family="DejaVu Sans", size=12, weight="bold"),
+        ).pack(side="left")
 
         self.summary_var = tk.StringVar(value="")
         ctk.CTkLabel(
@@ -769,6 +757,7 @@ class JoaKAppleGUI(ctk.CTk):
         self._file_progress = {}
         self._pipeline_start_time = time.monotonic()
         self.progress.set(0)
+        self.progress_pct_var.set("0%")
         self.summary_var.set("")
         self.cancel_event.clear()
         self.start_button.configure(state="disabled")
@@ -843,7 +832,9 @@ class JoaKAppleGUI(ctk.CTk):
                 row.set_status(item.status, item.message)
             if item.status in ("concluido", "hash_invalido", "erro", "cancelado"):
                 self._done_entries += 1
-                self.progress.set(min(1.0, self._done_entries / self._total_entries))
+                fraction = min(1.0, self._done_entries / self._total_entries)
+                self.progress.set(fraction)
+                self.progress_pct_var.set(f"{int(round(fraction * 100))}%")
         elif isinstance(item, core.PipelineSummary):
             self.summary_var.set(
                 f"Concluídos: {item.concluidos}/{item.total}  ·  "
@@ -870,10 +861,10 @@ class JoaKAppleGUI(ctk.CTk):
         entao) pra mostrar o total baixado, a velocidade agregada e o ETA do lote."""
         if not self._file_progress:
             return
-        total_done = sum(e.bytes_done for e in self._file_progress.values())
-        total_known = sum(e.bytes_total for e in self._file_progress.values() if e.bytes_total > 0)
-        elapsed = max(time.monotonic() - self._pipeline_start_time, 0.001)
-        speed = total_done / elapsed if total_done > 0 else 0.0
+        agg = core.aggregate_progress(self._file_progress, self._pipeline_start_time)
+        total_done = agg["bytes_done"]
+        total_known = agg["bytes_known"]
+        speed = agg["speed_bps"]
 
         if total_known > 0:
             parts = [f"{report.humanize_bytes(total_done)} / {report.humanize_bytes(total_known)}"]
@@ -882,8 +873,8 @@ class JoaKAppleGUI(ctk.CTk):
 
         parts.append(f"↓ {report.humanize_bytes(speed)}/s total" if speed > 0 else "↓ calculando…")
 
-        if speed > 0 and total_known > total_done:
-            parts.append(f"restante ~{_format_eta((total_known - total_done) / speed)}")
+        if agg["eta_seconds"] is not None:
+            parts.append(f"restante ~{core.format_eta(agg['eta_seconds'])}")
 
         self.summary_var.set("  ·  ".join(parts))
 

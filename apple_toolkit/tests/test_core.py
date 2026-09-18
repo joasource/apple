@@ -105,6 +105,92 @@ def test_pipeline_config_custom_log_path(tmp_path):
     assert config.log_path == custom_log
 
 
+# -------------------------------------------------------------------- format_eta
+
+
+def test_format_eta_minutes_seconds():
+    assert core.format_eta(75) == "01:15"
+
+
+def test_format_eta_hours():
+    assert core.format_eta(3725) == "01:02:05"
+
+
+def test_format_eta_negative_or_nan_is_zero():
+    assert core.format_eta(-5) == "00:00"
+    assert core.format_eta(float("nan")) == "00:00"
+
+
+# --------------------------------------------------------------- ProgressTracker
+
+
+def test_progress_tracker_computes_speed_after_settling():
+    tracker = core.ProgressTracker()
+    start = 1000.0
+
+    estimate = tracker.update(0, 100, now=start)
+    assert estimate.speed_bps == 0.0
+    assert estimate.eta_seconds is None
+
+    estimate = tracker.update(50, 100, now=start + 1.0)
+    assert estimate.speed_bps == pytest.approx(50.0)
+    assert estimate.eta_seconds == pytest.approx(1.0)
+
+
+def test_progress_tracker_no_speed_before_settle_window():
+    tracker = core.ProgressTracker()
+    start = 1000.0
+    estimate = tracker.update(50, 100, now=start + 0.1)
+    assert estimate.speed_bps == 0.0
+
+
+def test_progress_tracker_restarts_on_new_attempt():
+    tracker = core.ProgressTracker()
+    start = 1000.0
+
+    tracker.update(80, 100, now=start)
+    tracker.update(100, 100, now=start + 1.0)
+
+    # nova tentativa: bytes_done cai de volta pra 0
+    estimate = tracker.update(0, 100, now=start + 2.0)
+    assert estimate.speed_bps == 0.0
+
+    estimate = tracker.update(30, 100, now=start + 3.0)
+    assert estimate.speed_bps == pytest.approx(30.0)
+
+
+# ------------------------------------------------------------- aggregate_progress
+
+
+def test_aggregate_progress_sums_known_files():
+    events = {
+        "a.txt": core.ProgressEvent("a.txt", bytes_done=40, bytes_total=100),
+        "b.txt": core.ProgressEvent("b.txt", bytes_done=10, bytes_total=50),
+    }
+    result = core.aggregate_progress(events, start_time=1000.0, now=1002.0)
+
+    assert result["bytes_done"] == 50
+    assert result["bytes_known"] == 150
+    assert result["speed_bps"] == pytest.approx(25.0)
+    assert result["eta_seconds"] == pytest.approx((150 - 50) / 25.0)
+
+
+def test_aggregate_progress_unknown_total_has_no_eta():
+    events = {"a.txt": core.ProgressEvent("a.txt", bytes_done=40, bytes_total=0)}
+    result = core.aggregate_progress(events, start_time=1000.0, now=1001.0)
+
+    assert result["bytes_known"] == 0
+    assert result["eta_seconds"] is None
+
+
+def test_aggregate_progress_empty_events():
+    result = core.aggregate_progress({}, start_time=1000.0, now=1001.0)
+
+    assert result["bytes_done"] == 0
+    assert result["speed_bps"] == 0.0
+    assert result["eta_seconds"] is None
+
+
 # ------------------------------------------------------------------ pipeline
 
 

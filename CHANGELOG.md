@@ -4,6 +4,39 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.7.0] - 2026-09-18
+
+### Adicionado
+- Porcentagem numérica na barra de progresso geral (agregada, no topo da
+  tela), além da cor enchendo — mostra `0%` a `100%` conforme os arquivos
+  vão sendo concluídos.
+- Modo texto `--no-gui` (só no Linux/AppImage — o `.exe` do Windows
+  continua sem CLI, ver nota técnica abaixo), cobrindo todas as
+  funcionalidades da GUI via subcomandos `run`/`list`/`delete`/`report`:
+  - `run` baixa/verifica/descriptografa, com seleção de arquivos
+    (`--only`/`--exclude`/`--pattern`), status ao vivo no terminal
+    (percentual, velocidade, ETA por arquivo e agregado) e log colorido.
+  - `list` lista os arquivos do CSV sem baixar nada.
+  - `delete` remove do disco os arquivos já obtidos de uma seleção
+    explícita (nunca "tudo" por engano).
+  - `report` gera o Termo de Recebimento em `md`/`html`/`docx`.
+  - Um menu interativo simples (`input()`, sem biblioteca nova) aparece
+    automaticamente quando falta informação obrigatória, ou com
+    `--menu`/`-i`.
+  - Senha do GPG nunca aceita em texto puro numa flag: prompt interativo,
+    `--passphrase-env` ou `--passphrase-stdin`.
+
+### Técnico
+- `format_eta`, `ProgressTracker` (velocidade/ETA por download) e
+  `aggregate_progress` (agregado do lote) foram extraídos de `gui.py`
+  para `core.py`, eliminando a duplicação entre a barra por arquivo, a
+  barra agregada e o novo modo texto — os três agora reusam a mesma
+  implementação, coberta por testes novos em `test_core.py`.
+- Novo `apple_toolkit/app.py`: ponto de entrada único (`--no-gui` decide
+  entre `cli.py` e `gui.py`), usado pelo build Linux do PyInstaller no
+  lugar de `gui.py` direto. O build Windows não muda — continua
+  compilando `gui.py` direto, sem modo texto.
+
 ## [1.6.0] - 2026-09-18
 
 ### Adicionado

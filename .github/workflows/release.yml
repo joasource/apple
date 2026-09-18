@@ -132,7 +132,7 @@ jobs:
             --collect-data docx \
             --add-data "${{ github.workspace }}/packaging/linux/icon.png:." \
             --distpath dist --workpath build --specpath build \
-            apple_toolkit/gui.py
+            apple_toolkit/app.py
 
       - name: Montar AppDir
         run: |

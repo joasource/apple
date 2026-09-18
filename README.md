@@ -74,6 +74,32 @@ Rodar o programa de novo em cima da mesma pasta é seguro: arquivos que já
 foram baixados, já conferidos ou já descriptografados são identificados e
 pulados automaticamente — nada é refeito à toa.
 
+## Modo texto (`--no-gui`, só no Linux)
+
+No Linux, dá pra rodar tudo isso sem abrir janela nenhuma, direto do
+terminal — útil pra servidor, script ou automação:
+
+```bash
+./JoaKApple-x86_64.AppImage --no-gui run --csv retorno.csv --output-dir ./saida
+./JoaKApple-x86_64.AppImage --no-gui list --csv retorno.csv
+./JoaKApple-x86_64.AppImage --no-gui delete --csv retorno.csv --output-dir ./saida --only arquivo.txt.gpg
+./JoaKApple-x86_64.AppImage --no-gui report --responsavel "Fulano" --format docx --out termo.docx
+```
+
+Se faltar alguma informação obrigatória (ex.: `--csv`), ou se você passar
+`--menu`/`-i`, um menu interativo simples pergunta o que falta — mesma
+lógica da GUI, sem depender de nenhuma biblioteca nova.
+
+A senha do GPG nunca vai numa flag em texto puro (ficaria visível em
+`ps aux`/histórico do shell). Use uma destas opções:
+- Prompt interativo (padrão, se o terminal permitir).
+- `--passphrase-env NOME_DA_VARIAVEL` — lê de uma variável de ambiente já setada.
+- `--passphrase-stdin` — lê uma linha do stdin: `echo "senha" | ... --passphrase-stdin`.
+
+Rode `./JoaKApple-x86_64.AppImage --no-gui --help` (ou `run --help`,
+`report --help` etc.) pra ver todas as opções de cada subcomando. O `.exe`
+do Windows não tem esse modo — só a GUI.
+
 ## Se der algum problema
 
 - **"gpg não foi encontrado no PATH"**: no Windows isso não deveria acontecer
@@ -90,11 +116,14 @@ pulados automaticamente — nada é refeito à toa.
 ### Para quem for mexer no código
 
 O código-fonte fica em `apple_toolkit/` (`core.py` é o motor do pipeline,
-`gui.py` é a interface gráfica). Os executáveis são gerados automaticamente
-pelo GitHub Actions (`.github/workflows/release.yml`) a cada tag `vX.Y.Z`
-enviada ao repositório. Os arquivos em `legacy/` (`baixar.py`, `conferir.py`
-e `decriptar.py`) são os scripts originais, mantidos só como referência
-histórica.
+`gui.py` é a interface gráfica, `cli.py` é o modo texto Linux-only e
+`app.py` é o ponto de entrada único que escolhe entre os dois conforme a
+flag `--no-gui`). Os executáveis são gerados automaticamente pelo GitHub
+Actions (`.github/workflows/release.yml`) a cada tag `vX.Y.Z` enviada ao
+repositório — o `.exe` do Windows compila a partir de `gui.py` direto (sem
+CLI); o AppImage do Linux compila a partir de `app.py`. Os arquivos em
+`legacy/` (`baixar.py`, `conferir.py` e `decriptar.py`) são os scripts
+originais, mantidos só como referência histórica.
 
 Os testes automatizados (`apple_toolkit/tests/`) cobrem o motor do
 pipeline: leitura de CSV, download, verificação de hash e descriptografia
