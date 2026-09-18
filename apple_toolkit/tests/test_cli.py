@@ -304,3 +304,33 @@ def test_cmd_delete_removes_selected_files(tmp_path):
 
     assert code == cli.EXIT_OK
     assert not (output_dir / "a.txt").exists()
+
+
+# --------------------------------------------------------------------- report
+
+
+def test_cmd_report_only_filters_hash_rows(tmp_path, capsys):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (output_dir / "a.txt").write_bytes(b"conteudo a")
+    (output_dir / "b.txt").write_bytes(b"conteudo b")
+    csv_path = tmp_path / "in.csv"
+    _write_csv(
+        csv_path, ["File_Name", "File_Link", "GPG_SHA256"],
+        [
+            ["a.txt", "https://example.com/a", ""],
+            ["b.txt", "https://example.com/b", ""],
+        ],
+    )
+
+    code = cli.main(
+        [
+            "report", "--csv", str(csv_path), "--output-dir", str(output_dir),
+            "--only", "a.txt", "--format", "md",
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert code == cli.EXIT_OK
+    assert "a.txt" in out
+    assert "b.txt" not in out

@@ -4,6 +4,17 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.7.3] - 2026-09-18
+
+### Corrigido
+- CLI (`report`): o subcomando não tinha noção de "seleção" e calculava
+  hash de todos os arquivos do CSV, mesmo com `--only`/`--exclude`/
+  `--pattern` disponíveis no `run`. Agora `report` aceita as mesmas
+  flags de seleção, e o menu interativo (`--menu`/`-i`) ganhou uma etapa
+  de escolha de arquivos (igual ao `run`) antes de calcular os hashes —
+  mesmo bug do Termo de Recebimento da GUI (v1.7.1), agora corrigido
+  também no modo texto.
+
 ## [1.7.2] - 2026-09-18
 
 ### Adicionado

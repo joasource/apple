@@ -536,6 +536,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
     out_path = args.out
     csv_path = args.csv
     output_dir = args.output_dir
+    selected_entries: list[core.FileEntry] = []
 
     if fmt == "docx" and not out_path and not interactive:
         print("Erro: --out e obrigatorio para --format docx.", file=sys.stderr)
@@ -563,6 +564,14 @@ def _cmd_report(args: argparse.Namespace) -> int:
             if not output_dir:
                 out_dir_str = _prompt("Pasta de destino (opcional, p/ calcular hashes)", "")
                 output_dir = Path(out_dir_str) if out_dir_str else None
+            if csv_path and output_dir:
+                try:
+                    entries = core.load_entries(Path(csv_path))
+                except core.PipelineError as exc:
+                    print(f"Erro: {exc}", file=sys.stderr)
+                    return EXIT_FATAL
+                preselected = _select_entries(entries, args.only, args.exclude, args.pattern)
+                selected_entries = _menu_select_files(entries, preselected)
             values["procedimento_referenciado"] = _prompt(
                 "Procedimento referenciado (autos)", values["procedimento_referenciado"]
             )
@@ -595,12 +604,16 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
     hash_rows = []
     if csv_path and output_dir:
-        try:
-            entries = core.load_entries(Path(csv_path))
-        except core.PipelineError as exc:
-            print(f"Erro: {exc}", file=sys.stderr)
-            return EXIT_FATAL
-        hash_rows = report.compute_hash_rows(entries, Path(output_dir))
+        if interactive:
+            selected = selected_entries
+        else:
+            try:
+                entries = core.load_entries(Path(csv_path))
+            except core.PipelineError as exc:
+                print(f"Erro: {exc}", file=sys.stderr)
+                return EXIT_FATAL
+            selected = _select_entries(entries, args.only, args.exclude, args.pattern)
+        hash_rows = report.compute_hash_rows(selected, Path(output_dir))
 
     data = report.ReportData(
         numero_processo=values["numero_processo"],
@@ -696,6 +709,9 @@ def build_parser() -> argparse.ArgumentParser:
     report_p.add_argument("--processada", action=argparse.BooleanOptionalAction, default=False)
     report_p.add_argument("--csv", type=Path, default=None, help="Para calcular hashes")
     report_p.add_argument("--output-dir", type=Path, default=None, help="Para calcular hashes")
+    report_p.add_argument("--only", default=None, help="Nomes de arquivo separados por virgula")
+    report_p.add_argument("--exclude", default=None, help="Nomes de arquivo separados por virgula")
+    report_p.add_argument("--pattern", default=None, help="Glob (fnmatch) sobre o nome do arquivo")
     report_p.add_argument("--format", choices=["md", "html", "docx"], default="md")
     report_p.add_argument("--out", type=Path, default=None, help="Obrigatorio para --format docx")
     report_p.add_argument("--menu", "-i", action="store_true")
