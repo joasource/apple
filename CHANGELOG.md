@@ -4,6 +4,28 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.8.0] - 2026-09-18
+
+### Corrigido
+- GUI: a tela do Termo de Recebimento ficava travada em "Calculando
+  hashes…" sem nenhum feedback, recalculando do zero — em série e num
+  único thread — o hash de todo arquivo selecionado, mesmo os que o
+  pipeline principal já tinha acabado de conferir (com barra de
+  progresso) segundos antes. Para lotes com arquivos grandes/numerosos
+  isso dava a impressão de travamento, mesmo sem nenhum erro.
+
+### Adicionado
+- `core.FileEntry` agora guarda o hash calculado na etapa de verificação
+  do pipeline (junto com tamanho/mtime do arquivo naquele momento).
+  `core.cached_file_hash()` reaproveita esse valor enquanto o arquivo em
+  disco não mudar.
+- `report.compute_hash_rows_cached()`: usa esse cache pro que já foi
+  conferido e calcula em paralelo (mesmo `ThreadPoolExecutor` do
+  pipeline) só o que falta, com progresso por arquivo. A tela do Termo
+  de Recebimento passou a usar essa função — o texto agora atualiza ao
+  vivo (bytes, velocidade, ETA) em vez de ficar parado até tudo
+  terminar.
+
 ## [1.7.3] - 2026-09-18
 
 ### Corrigido

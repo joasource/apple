@@ -22,6 +22,48 @@ def test_compute_hash_rows_mixes_found_and_missing_files(tmp_path):
     assert rows[1].size_bytes == 0
 
 
+def test_compute_hash_rows_cached_reuses_valid_cache_and_computes_the_rest(tmp_path):
+    cached_path = tmp_path / "cached.pdf"
+    cached_path.write_bytes(b"ja verificado no pipeline")
+    stat = cached_path.stat()
+    pending_path = tmp_path / "pending.pdf"
+    pending_path.write_bytes(b"nunca calculado ainda")
+
+    cached_entry = core.FileEntry(
+        file_name="cached.pdf", file_link="https://example.com/a", sha256_expected=None,
+        sha256_computed="cafecafe", sha256_computed_stat=(stat.st_size, stat.st_mtime),
+    )
+    pending_entry = core.FileEntry(file_name="pending.pdf", file_link="https://example.com/b", sha256_expected=None)
+
+    progress_calls: list[str] = []
+    rows = report.compute_hash_rows_cached(
+        [cached_entry, pending_entry], tmp_path,
+        on_progress=lambda entry, done, total, phase: progress_calls.append(entry.file_name),
+    )
+
+    by_name = {row.file_name: row for row in rows}
+    assert by_name["cached.pdf"].sha256 == "cafecafe"
+    assert by_name["pending.pdf"].sha256 == core.sha256_of_file(pending_path)
+    # so o arquivo pendente passa pelo calculo (e reporta progresso) — o cacheado eh reaproveitado.
+    assert "cached.pdf" not in progress_calls
+
+
+def test_compute_hash_rows_cached_recomputes_when_file_changed_after_cache(tmp_path):
+    path = tmp_path / "a.pdf"
+    path.write_bytes(b"conteudo original")
+    stat = path.stat()
+    entry = core.FileEntry(
+        file_name="a.pdf", file_link="https://example.com/a", sha256_expected=None,
+        sha256_computed="hashantigo", sha256_computed_stat=(stat.st_size, stat.st_mtime),
+    )
+    path.write_bytes(b"conteudo mudou depois do cache")
+
+    rows = report.compute_hash_rows_cached([entry], tmp_path)
+
+    assert rows[0].sha256 == core.sha256_of_file(path)
+    assert rows[0].sha256 != "hashantigo"
+
+
 def test_humanize_bytes():
     assert report.humanize_bytes(0) == "0 bytes"
     assert report.humanize_bytes(1023) == "1023 bytes"

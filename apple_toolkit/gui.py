@@ -27,7 +27,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.7.3"
+APP_VERSION = "1.8.0"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -1065,26 +1065,61 @@ class JoaKAppleGUI(ctk.CTk):
                     entries = []
 
         if entries and output_dir:
+            try:
+                max_workers = max(1, int(self.workers_var.get()))
+            except ValueError:
+                max_workers = 4
+
             generate_button.configure(state="disabled", text="Calculando hashes…")
             hash_status_var.set("Calculando hashes dos arquivos recebidos…")
             result_queue: queue.Queue = queue.Queue()
-            threading.Thread(
-                target=lambda: result_queue.put(report.compute_hash_rows(entries, Path(output_dir))),
-                daemon=True,
-            ).start()
-            self._poll_report_hash_queue(win, result_queue)
+            progress_queue: queue.Queue = queue.Queue()
+            win._hash_progress: dict[str, core.ProgressEvent] = {}
+            win._hash_trackers: dict[str, core.ProgressTracker] = {}
+            win._hash_start = time.monotonic()
+
+            def on_progress(entry: core.FileEntry, bytes_done: int, bytes_total: int, phase: str) -> None:
+                progress_queue.put((entry.file_name, bytes_done, bytes_total))
+
+            def worker() -> None:
+                rows = report.compute_hash_rows_cached(
+                    entries, Path(output_dir), max_workers=max_workers, on_progress=on_progress,
+                )
+                result_queue.put(rows)
+
+            threading.Thread(target=worker, daemon=True).start()
+            self._poll_report_hash_queue(win, result_queue, progress_queue)
         elif self.entries and not entries:
             hash_status_var.set(
                 "Nenhum arquivo selecionado na lista — marque ao menos um arquivo antes de gerar o termo."
             )
 
-    def _poll_report_hash_queue(self, win, result_queue: "queue.Queue"):
+    def _poll_report_hash_queue(self, win, result_queue: "queue.Queue", progress_queue: "queue.Queue"):
         if not win.winfo_exists():
             return
+
         try:
             rows = result_queue.get_nowait()
         except queue.Empty:
-            win.after(150, self._poll_report_hash_queue, win, result_queue)
+            while True:
+                try:
+                    name, bytes_done, bytes_total = progress_queue.get_nowait()
+                except queue.Empty:
+                    break
+                win._hash_progress[name] = core.ProgressEvent(name, bytes_done, bytes_total, phase="hash")
+
+            if win._hash_progress:
+                agg = core.aggregate_progress(win._hash_progress, win._hash_start)
+                if agg["bytes_known"] > 0:
+                    speed_text = (
+                        f"{report.humanize_bytes(agg['speed_bps'])}/s" if agg["speed_bps"] > 0 else "calculando velocidade…"
+                    )
+                    eta_text = core.format_eta(agg["eta_seconds"]) if agg["eta_seconds"] is not None else "--:--"
+                    win.hash_status_var.set(
+                        f"Calculando hashes… {report.humanize_bytes(agg['bytes_done'])}/"
+                        f"{report.humanize_bytes(agg['bytes_known'])}  ·  {speed_text}  ·  ETA {eta_text}"
+                    )
+            win.after(150, self._poll_report_hash_queue, win, result_queue, progress_queue)
             return
 
         win.hash_rows = rows

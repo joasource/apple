@@ -9,9 +9,10 @@ os hashes SHA-256 calculados a partir dos arquivos efetivamente recebidos
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import core
 
@@ -37,6 +38,45 @@ def compute_hash_rows(entries: list[core.FileEntry], output_dir: Path) -> list[H
         else:
             rows.append(HashRow(entry.file_name, None, 0))
     return rows
+
+
+def compute_hash_rows_cached(
+    entries: list[core.FileEntry],
+    output_dir: Path,
+    max_workers: int = 4,
+    on_progress: Optional[Callable[[core.FileEntry, int, int, str], None]] = None,
+) -> list[HashRow]:
+    """Como compute_hash_rows, mas reaproveita o hash ja calculado na etapa de
+    verificacao do pipeline (core.FileEntry.sha256_computed, valido enquanto o
+    arquivo no disco nao mudar) e paraleliza o calculo do que sobrar, com
+    progresso por arquivo via on_progress — evita recalcular do zero (serial e
+    sem feedback) o que a GUI acabou de conferir."""
+    rows: dict[str, HashRow] = {}
+    pending: list[core.FileEntry] = []
+    for entry in entries:
+        path = output_dir / entry.file_name
+        if not path.is_file():
+            rows[entry.file_name] = HashRow(entry.file_name, None, 0)
+            continue
+        cached = core.cached_file_hash(entry, path)
+        if cached is not None:
+            rows[entry.file_name] = HashRow(entry.file_name, cached, path.stat().st_size)
+        else:
+            pending.append(entry)
+
+    def _hash_one(entry: core.FileEntry) -> None:
+        path = output_dir / entry.file_name
+        progress = (
+            (lambda done, total: on_progress(entry, done, total, "hash")) if on_progress else None
+        )
+        sha256 = core.sha256_of_file(path, on_progress=progress)
+        rows[entry.file_name] = HashRow(entry.file_name, sha256, path.stat().st_size)
+
+    if pending:
+        with ThreadPoolExecutor(max_workers=max(1, max_workers), thread_name_prefix="report-hash") as pool:
+            list(pool.map(_hash_one, pending))
+
+    return [rows[e.file_name] for e in entries]
 
 
 def humanize_bytes(n: int) -> str:

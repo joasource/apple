@@ -119,6 +119,11 @@ class FileEntry:
     sha256_expected: Optional[str]
     status: str = "pendente"
     message: str = ""
+    # Preenchidos quando a etapa de verificacao do pipeline calcula o hash do
+    # arquivo, pra' quem vier depois (ex.: tela do Termo de Recebimento) poder
+    # reaproveitar em vez de recalcular — ver cached_file_hash().
+    sha256_computed: Optional[str] = None
+    sha256_computed_stat: Optional[tuple[int, float]] = None
 
     @property
     def is_encrypted(self) -> bool:
@@ -302,6 +307,21 @@ def sha256_of_file(
     if on_progress:
         on_progress(bytes_done, total)  # evento final, garante 100%
     return hasher.hexdigest()
+
+
+def cached_file_hash(entry: FileEntry, path: Path) -> Optional[str]:
+    """Hash ja calculado pro arquivo (na verificacao do pipeline), se o arquivo
+    em disco nao mudou desde entao (mesmo tamanho/mtime); None se precisa
+    (re)calcular."""
+    if entry.sha256_computed is None or entry.sha256_computed_stat is None:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    if (stat.st_size, stat.st_mtime) != entry.sha256_computed_stat:
+        return None
+    return entry.sha256_computed
 
 
 def _make_session() -> requests.Session:
@@ -546,6 +566,9 @@ def process_entry(
             )
             hash_calculado = sha256_of_file(dest, on_progress=hash_progress)
             hash_duration = time.monotonic() - hash_started
+            dest_stat = dest.stat()
+            entry.sha256_computed = hash_calculado
+            entry.sha256_computed_stat = (dest_stat.st_size, dest_stat.st_mtime)
             if hash_calculado.lower() != entry.sha256_expected.lower():
                 entry.status = "hash_invalido"
                 entry.message = (

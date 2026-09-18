@@ -333,6 +333,55 @@ def test_sha256_of_file_without_callback_still_works(tmp_path):
     assert core.sha256_of_file(path) == hashlib.sha256(content).hexdigest()
 
 
+def test_run_pipeline_caches_computed_hash_on_entry(tmp_path):
+    content = b"conteudo de teste"
+    sha = hashlib.sha256(content).hexdigest()
+    entry = core.FileEntry(file_name="ok.txt", file_link="https://example.com/ok.txt", sha256_expected=sha)
+    config = core.PipelineConfig(csv_path=tmp_path / "x.csv", output_dir=tmp_path / "out", decrypt=False)
+
+    with requests_mock.Mocker() as m:
+        m.get("https://example.com/ok.txt", content=content)
+        _collect_pipeline(config, [entry])
+
+    dest = config.output_dir / "ok.txt"
+    assert entry.sha256_computed == sha
+    assert entry.sha256_computed_stat == (dest.stat().st_size, dest.stat().st_mtime)
+
+
+def test_cached_file_hash_valid_when_stat_unchanged(tmp_path):
+    path = tmp_path / "a.txt"
+    path.write_bytes(b"conteudo")
+    stat = path.stat()
+    entry = core.FileEntry(
+        file_name="a.txt", file_link="x", sha256_expected=None,
+        sha256_computed="deadbeef", sha256_computed_stat=(stat.st_size, stat.st_mtime),
+    )
+
+    assert core.cached_file_hash(entry, path) == "deadbeef"
+
+
+def test_cached_file_hash_invalidated_when_file_changes(tmp_path):
+    path = tmp_path / "a.txt"
+    path.write_bytes(b"conteudo")
+    stat = path.stat()
+    entry = core.FileEntry(
+        file_name="a.txt", file_link="x", sha256_expected=None,
+        sha256_computed="deadbeef", sha256_computed_stat=(stat.st_size, stat.st_mtime),
+    )
+
+    path.write_bytes(b"conteudo diferente, tamanho mudou")
+
+    assert core.cached_file_hash(entry, path) is None
+
+
+def test_cached_file_hash_none_when_never_computed(tmp_path):
+    path = tmp_path / "a.txt"
+    path.write_bytes(b"conteudo")
+    entry = core.FileEntry(file_name="a.txt", file_link="x", sha256_expected=None)
+
+    assert core.cached_file_hash(entry, path) is None
+
+
 def test_run_pipeline_reports_hash_progress_as_separate_phase(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "PROGRESS_THROTTLE_SECONDS", 0)
     content = b"y" * (2 * 1024 * 1024)
