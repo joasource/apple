@@ -27,7 +27,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.7.1"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -1044,13 +1044,23 @@ class JoaKAppleGUI(ctk.CTk):
         # As variaveis (volume, hashes, quantidade) so ficam corretas depois que o
         # calculo em segundo plano termina — o botao fica desabilitado ate la para
         # nunca gerar o termo com placeholders por engano (ver CHANGELOG).
-        entries = self.entries
+        #
+        # So entra no termo o que esta marcado na lista (mesmo filtro que "Iniciar"
+        # usa em selected_entries) — se a lista nunca foi carregada nesta sessao (sem
+        # checkboxes pra consultar), cai no fallback de carregar tudo do CSV direto.
         output_dir = self.output_dir_var.get().strip()
-        if not entries and self.csv_path_var.get().strip():
-            try:
-                entries = core.load_entries(Path(self.csv_path_var.get().strip()))
-            except core.PipelineError:
-                entries = []
+        if self.entries:
+            entries = [
+                e for e in self.entries
+                if self.rows.get(e.file_name) and self.rows[e.file_name].selected_var.get()
+            ]
+        else:
+            entries = []
+            if self.csv_path_var.get().strip():
+                try:
+                    entries = core.load_entries(Path(self.csv_path_var.get().strip()))
+                except core.PipelineError:
+                    entries = []
 
         if entries and output_dir:
             generate_button.configure(state="disabled", text="Calculando hashes…")
@@ -1061,6 +1071,10 @@ class JoaKAppleGUI(ctk.CTk):
                 daemon=True,
             ).start()
             self._poll_report_hash_queue(win, result_queue)
+        elif self.entries and not entries:
+            hash_status_var.set(
+                "Nenhum arquivo selecionado na lista — marque ao menos um arquivo antes de gerar o termo."
+            )
 
     def _poll_report_hash_queue(self, win, result_queue: "queue.Queue"):
         if not win.winfo_exists():

@@ -4,6 +4,15 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.7.1] - 2026-09-18
+
+### Corrigido
+- Termo de Recebimento: o gerador usava **todos** os arquivos do CSV pra
+  listar e calcular hash, ignorando os checkboxes marcados na lista
+  principal. Agora usa só o que está selecionado (mesmo filtro que o
+  botão "Iniciar" já aplicava). Se nada estiver marcado, mostra um aviso
+  em vez de gerar um termo vazio silenciosamente.
+
 ## [1.7.0] - 2026-09-18
 
 ### Adicionado
