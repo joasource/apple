@@ -14,6 +14,7 @@ import queue
 import re
 import sys
 import threading
+import time
 from datetime import datetime
 import tkinter as tk
 from pathlib import Path
@@ -26,7 +27,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -87,6 +88,18 @@ STEP_META = {
 }
 
 _LEVEL_TAG_RE = re.compile(r"\[(DEBUG|INFO|OK|WARN|ERROR)\s*\]")
+
+
+def _format_eta(seconds: float) -> str:
+    """mm:ss (ou hh:mm:ss acima de 1h) para exibir tempo restante estimado."""
+    if seconds != seconds or seconds < 0:  # nan ou negativo
+        seconds = 0
+    seconds = int(seconds)
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 
 def _build_cf_html(html_fragment: str) -> bytes:
@@ -260,6 +273,9 @@ class FileRow(ctk.CTkFrame):
         )
         self.status_label.grid(row=1, column=2, padx=(0, 10), pady=(0, 8), sticky="e")
 
+        self._progress_start: float | None = None
+        self._last_bytes = 0
+
     def set_enabled(self, enabled: bool):
         state = "normal" if enabled else "disabled"
         self.checkbox.configure(state=state)
@@ -271,21 +287,34 @@ class FileRow(ctk.CTkFrame):
         self.progress.set(0)
         self.status_var.set(STATUS_LABELS["pendente"])
         self.status_label.configure(text_color=TEXT_SECONDARY)
+        self._progress_start = None
+        self._last_bytes = 0
 
     def update_progress(self, bytes_done: int, bytes_total: int):
+        now = time.monotonic()
+        if self._progress_start is None or bytes_done < self._last_bytes:
+            self._progress_start = now  # primeiro evento, ou nova tentativa reiniciando do zero
+        self._last_bytes = bytes_done
+        elapsed = now - self._progress_start
+        speed = bytes_done / elapsed if elapsed > 0.2 and bytes_done > 0 else 0.0
+        speed_text = f"{report.humanize_bytes(speed)}/s" if speed > 0 else "calculando velocidade…"
+
         if bytes_total > 0:
             self.progress.stop()
             self.progress.configure(mode="determinate")
             fraction = min(1.0, bytes_done / bytes_total)
             self.progress.set(fraction)
             pct = int(fraction * 100)
+            eta_text = _format_eta((bytes_total - bytes_done) / speed) if speed > 0 else "--:--"
             self.status_var.set(
                 f"Baixando {pct}%  ·  {report.humanize_bytes(bytes_done)}/{report.humanize_bytes(bytes_total)}"
+                f"  ·  {speed_text}  ·  ETA {eta_text}"
             )
         else:
             self.progress.configure(mode="indeterminate")
             self.progress.start()
-            self.status_var.set(f"Baixando  ·  {report.humanize_bytes(bytes_done)}")
+            self.status_var.set(f"Baixando  ·  {report.humanize_bytes(bytes_done)}  ·  {speed_text}")
+        self.status_label.configure(text_color=ACCENT)
 
     def set_status(self, status: str, message: str = ""):
         label = STATUS_LABELS.get(status, status)
@@ -328,6 +357,8 @@ class JoaKAppleGUI(ctk.CTk):
         self.entries: list[core.FileEntry] = []
         self.rows: dict[str, FileRow] = {}
         self.step_cards: dict[str, StepCard] = {}
+        self._file_progress: dict[str, core.ProgressEvent] = {}
+        self._pipeline_start_time: float = 0.0
 
         self.csv_path_var = tk.StringVar()
         self.output_dir_var = tk.StringVar()
@@ -735,6 +766,8 @@ class JoaKAppleGUI(ctk.CTk):
 
         self._total_entries = max(1, len(selected_entries))
         self._done_entries = 0
+        self._file_progress = {}
+        self._pipeline_start_time = time.monotonic()
         self.progress.set(0)
         self.summary_var.set("")
         self.cancel_event.clear()
@@ -802,6 +835,8 @@ class JoaKAppleGUI(ctk.CTk):
             row = self.rows.get(item.file_name)
             if row:
                 row.update_progress(item.bytes_done, item.bytes_total)
+            self._file_progress[item.file_name] = item
+            self._update_aggregate_summary()
         elif isinstance(item, core.FileEntry):
             row = self.rows.get(item.file_name)
             if row:
@@ -829,6 +864,28 @@ class JoaKAppleGUI(ctk.CTk):
         elif isinstance(item, Exception):
             self._reenable_controls()
             messagebox.showerror(APP_TITLE, f"Erro fatal no pipeline:\n{item}")
+
+    def _update_aggregate_summary(self):
+        """Enquanto o pipeline roda, reaproveita o espaco do resumo final (vazio ate
+        entao) pra mostrar o total baixado, a velocidade agregada e o ETA do lote."""
+        if not self._file_progress:
+            return
+        total_done = sum(e.bytes_done for e in self._file_progress.values())
+        total_known = sum(e.bytes_total for e in self._file_progress.values() if e.bytes_total > 0)
+        elapsed = max(time.monotonic() - self._pipeline_start_time, 0.001)
+        speed = total_done / elapsed if total_done > 0 else 0.0
+
+        if total_known > 0:
+            parts = [f"{report.humanize_bytes(total_done)} / {report.humanize_bytes(total_known)}"]
+        else:
+            parts = [report.humanize_bytes(total_done)]
+
+        parts.append(f"↓ {report.humanize_bytes(speed)}/s total" if speed > 0 else "↓ calculando…")
+
+        if speed > 0 and total_known > total_done:
+            parts.append(f"restante ~{_format_eta((total_known - total_done) / speed)}")
+
+        self.summary_var.set("  ·  ".join(parts))
 
     def _reenable_controls(self):
         self.cancel_button.configure(

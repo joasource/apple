@@ -4,6 +4,22 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.6.0] - 2026-09-18
+
+### Adicionado
+- Velocidade de download e ETA por arquivo: a linha de status de cada
+  download em andamento agora mostra, além de percentual e tamanho,
+  a velocidade atual e o tempo restante estimado (ex.: "Baixando 62%
+  · 15.2 MB/24.6 MB · 3.4 MB/s · ETA 00:03"). Aparece assim que a
+  conexão é aberta (quando o tamanho do arquivo é conhecido) e some
+  quando o download termina.
+- Velocidade e ETA agregados do lote: o espaço que hoje fica vazio na
+  barra de ação enquanto o pipeline roda passa a mostrar quanto já foi
+  baixado do total do lote, a velocidade agregada e o tempo restante
+  estimado (ex.: "42.1 MB / 128.4 MB · ↓ 6.4 MB/s total · restante
+  ~01:02"). Ao terminar, volta a mostrar o resumo final como já
+  funcionava.
+
 ## [1.5.0] - 2026-09-18
 
 ### Adicionado
