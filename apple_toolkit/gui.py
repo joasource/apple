@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import sys
 import threading
 from datetime import datetime
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -25,7 +26,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.5.0"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -45,12 +46,21 @@ BORDER_SOFT = "#ECE8DF"
 TEXT_PRIMARY = "#1C1B18"
 TEXT_SECONDARY = "#6B6862"
 BADGE_INACTIVE_BG = "#EDEAE3"
-LOG_BG = "#1C1B18"
-LOG_HEADER_BG = "#26241F"
+LOG_BG = "#12110E"
+LOG_HEADER_BG = "#1D1C17"
 LOG_TEXT = "#D8D4C8"
-LOG_TEXT_DIM = "#7A7669"
+LOG_TEXT_DIM = "#726E63"
+LOG_OK = "#59C68A"
+LOG_WARN = "#E3AE55"
+LOG_ERROR = "#E56A5D"
+LOG_INFO = "#8FB7C9"
 DISABLED_BG = "#F5F3EE"
 BUTTON_DISABLED_BG = "#C9C5BA"
+DANGER_TEXT = "#9A2E22"
+DANGER_HOVER = "#F6E4E1"
+STATUS_OK_COLOR = "#2E8B57"
+STATUS_ERROR_COLOR = "#C0392B"
+STATUS_WARN_COLOR = "#B8860B"
 
 STATUS_LABELS = {
     "pendente": "Pendente",
@@ -60,7 +70,14 @@ STATUS_LABELS = {
     "hash_invalido": "HASH INVALIDO",
     "erro": "ERRO",
     "cancelado": "Cancelado",
-    "concluido": "Concluido",
+    "concluido": "Concluído",
+}
+
+STATUS_ROW_COLOR = {
+    "hash_invalido": STATUS_ERROR_COLOR,
+    "erro": STATUS_ERROR_COLOR,
+    "cancelado": STATUS_WARN_COLOR,
+    "concluido": STATUS_OK_COLOR,
 }
 
 STEP_META = {
@@ -68,6 +85,8 @@ STEP_META = {
     "verify": ("2", "Verificar", "Confere o hash SHA256 de cada arquivo contra o valor informado pela Apple."),
     "decrypt": ("3", "Descriptografar", "Usa a senha GPG para descriptografar os arquivos .gpg já conferidos."),
 }
+
+_LEVEL_TAG_RE = re.compile(r"\[(DEBUG|INFO|OK|WARN|ERROR)\s*\]")
 
 
 def _build_cf_html(html_fragment: str) -> bytes:
@@ -196,13 +215,102 @@ class StepCard(ctk.CTkFrame):
         )
 
 
+class FileRow(ctk.CTkFrame):
+    """Uma linha da lista de arquivos: selecao, nome, progresso individual,
+    status e um botao para excluir o que ja foi baixado/descriptografado."""
+
+    def __init__(self, master, entry: core.FileEntry, on_delete, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+        self.entry = entry
+        self._on_delete = on_delete
+        self.selected_var = tk.BooleanVar(value=True)
+
+        self.columnconfigure(1, weight=1)
+
+        self.checkbox = ctk.CTkCheckBox(
+            self, text="", variable=self.selected_var, width=18,
+            checkbox_width=18, checkbox_height=18, fg_color=ACCENT, border_color=BORDER,
+        )
+        self.checkbox.grid(row=0, column=0, rowspan=2, padx=(10, 8), pady=8, sticky="n")
+
+        self.name_label = ctk.CTkLabel(
+            self, text=entry.file_name, text_color=TEXT_PRIMARY, anchor="w",
+            font=ctk.CTkFont(family="DejaVu Sans", size=12, weight="bold"),
+        )
+        self.name_label.grid(row=0, column=1, sticky="we", pady=(8, 2))
+
+        self.delete_button = ctk.CTkButton(
+            self, text="Excluir", width=68, height=22, fg_color="#FFFFFF", hover_color=DANGER_HOVER,
+            text_color=DANGER_TEXT, border_width=1, border_color=BORDER, corner_radius=6,
+            font=ctk.CTkFont(family="DejaVu Sans", size=10),
+            command=lambda: self._on_delete(self.entry),
+        )
+        self.delete_button.grid(row=0, column=2, padx=(8, 10), pady=(8, 2), sticky="e")
+
+        self.progress = ctk.CTkProgressBar(
+            self, progress_color=ACCENT, fg_color=BORDER_SOFT, height=6, corner_radius=3,
+        )
+        self.progress.set(0)
+        self.progress.grid(row=1, column=1, sticky="we", padx=(0, 10), pady=(0, 8))
+
+        self.status_var = tk.StringVar(value=STATUS_LABELS["pendente"])
+        self.status_label = ctk.CTkLabel(
+            self, textvariable=self.status_var, text_color=TEXT_SECONDARY, anchor="e",
+            font=ctk.CTkFont(family="DejaVu Sans", size=10),
+        )
+        self.status_label.grid(row=1, column=2, padx=(0, 10), pady=(0, 8), sticky="e")
+
+    def set_enabled(self, enabled: bool):
+        state = "normal" if enabled else "disabled"
+        self.checkbox.configure(state=state)
+        self.delete_button.configure(state=state)
+
+    def reset(self):
+        self.progress.stop()
+        self.progress.configure(mode="determinate", progress_color=ACCENT)
+        self.progress.set(0)
+        self.status_var.set(STATUS_LABELS["pendente"])
+        self.status_label.configure(text_color=TEXT_SECONDARY)
+
+    def update_progress(self, bytes_done: int, bytes_total: int):
+        if bytes_total > 0:
+            self.progress.stop()
+            self.progress.configure(mode="determinate")
+            fraction = min(1.0, bytes_done / bytes_total)
+            self.progress.set(fraction)
+            pct = int(fraction * 100)
+            self.status_var.set(
+                f"Baixando {pct}%  ·  {report.humanize_bytes(bytes_done)}/{report.humanize_bytes(bytes_total)}"
+            )
+        else:
+            self.progress.configure(mode="indeterminate")
+            self.progress.start()
+            self.status_var.set(f"Baixando  ·  {report.humanize_bytes(bytes_done)}")
+
+    def set_status(self, status: str, message: str = ""):
+        label = STATUS_LABELS.get(status, status)
+        self.progress.stop()
+        self.progress.configure(mode="determinate")
+        if status == "concluido":
+            self.progress.set(1.0)
+        elif status in ("erro", "hash_invalido", "cancelado"):
+            self.progress.configure(progress_color=STATUS_ROW_COLOR.get(status, ACCENT))
+        if message and status in ("erro", "hash_invalido"):
+            short = message if len(message) <= 70 else message[:67] + "…"
+            text = f"{label} — {short}"
+        else:
+            text = label
+        self.status_var.set(text)
+        self.status_label.configure(text_color=STATUS_ROW_COLOR.get(status, TEXT_SECONDARY))
+
+
 class JoaKAppleGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         ctk.set_appearance_mode("light")
 
         self.title(f"{APP_TITLE} v{APP_VERSION}")
-        self.minsize(880, 620)
+        self.minsize(960, 660)
         self.configure(fg_color=BG_APP)
 
         icon_path = _icon_image_path()
@@ -218,7 +326,7 @@ class JoaKAppleGUI(ctk.CTk):
         self.cancel_event = threading.Event()
         self.worker_thread: threading.Thread | None = None
         self.entries: list[core.FileEntry] = []
-        self.row_by_name: dict[str, str] = {}
+        self.rows: dict[str, FileRow] = {}
         self.step_cards: dict[str, StepCard] = {}
 
         self.csv_path_var = tk.StringVar()
@@ -226,6 +334,8 @@ class JoaKAppleGUI(ctk.CTk):
         self.passphrase_var = tk.StringVar()
         self.workers_var = tk.StringVar(value="4")
         self.show_pass_var = tk.BooleanVar(value=False)
+        self.select_all_var = tk.BooleanVar(value=True)
+        self.file_count_var = tk.StringVar(value="Nenhum arquivo carregado")
 
         self._build_widgets()
         self._poll_queues()
@@ -348,41 +458,56 @@ class JoaKAppleGUI(ctk.CTk):
         )
         list_card.pack(side="left", fill="both", expand=True, padx=(0, 8))
 
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure(
-            "JoaK.Treeview", background="#FFFFFF", fieldbackground="#FFFFFF",
-            foreground=TEXT_PRIMARY, rowheight=26, borderwidth=0,
+        list_header = ctk.CTkFrame(list_card, fg_color=BG_CARD, corner_radius=0, height=36)
+        list_header.pack(fill="x")
+        list_header.pack_propagate(False)
+        self.select_all_check = ctk.CTkCheckBox(
+            list_header, text="", variable=self.select_all_var, command=self._toggle_select_all,
+            checkbox_width=18, checkbox_height=18, fg_color=ACCENT, border_color=BORDER, width=18,
         )
-        style.configure(
-            "JoaK.Treeview.Heading", background=BG_CARD, foreground=TEXT_SECONDARY,
-            font=("TkDefaultFont", 10, "bold"), borderwidth=0,
+        self.select_all_check.pack(side="left", padx=(10, 8))
+        ctk.CTkLabel(
+            list_header, text="ARQUIVOS DO CSV — SELECIONE OS QUE DESEJA PROCESSAR",
+            text_color=TEXT_SECONDARY, font=ctk.CTkFont(family="DejaVu Sans", size=10, weight="bold"),
+        ).pack(side="left")
+        ctk.CTkButton(
+            list_header, text="↻", width=26, height=22, command=self._reload_file_list,
+            fg_color="transparent", hover_color=BORDER_SOFT, text_color=TEXT_SECONDARY,
+            border_width=1, border_color=BORDER, corner_radius=6,
+        ).pack(side="right", padx=(0, 10))
+        ctk.CTkLabel(
+            list_header, textvariable=self.file_count_var, text_color=TEXT_SECONDARY,
+            font=ctk.CTkFont(family="DejaVu Sans", size=10),
+        ).pack(side="right", padx=(0, 10))
+
+        self.file_list_frame = ctk.CTkScrollableFrame(list_card, fg_color="#FFFFFF", corner_radius=0)
+        self.file_list_frame.pack(fill="both", expand=True, padx=1, pady=(0, 1))
+
+        self.empty_list_label = ctk.CTkLabel(
+            self.file_list_frame,
+            text="Selecione o CSV da Apple para listar os arquivos aqui.",
+            text_color=TEXT_SECONDARY, font=ctk.CTkFont(family="DejaVu Sans", size=12),
         )
-        style.map("JoaK.Treeview", background=[("selected", ACCENT_TINT)])
+        self.empty_list_label.pack(pady=40)
 
-        columns = ("arquivo", "status", "detalhes")
-        self.tree = ttk.Treeview(list_card, columns=columns, show="headings", style="JoaK.Treeview")
-        self.tree.heading("arquivo", text="Arquivo")
-        self.tree.heading("status", text="Status")
-        self.tree.heading("detalhes", text="Detalhes")
-        self.tree.column("arquivo", width=280)
-        self.tree.column("status", width=130)
-        self.tree.column("detalhes", width=260)
-        self.tree.pack(fill="both", expand=True, padx=1, pady=1)
-
-        log_card = ctk.CTkFrame(content, fg_color=LOG_BG, corner_radius=10, width=320)
+        log_card = ctk.CTkFrame(content, fg_color=LOG_BG, corner_radius=10, width=360)
         log_card.pack(side="left", fill="both", padx=(8, 0))
         log_card.pack_propagate(False)
         ctk.CTkLabel(
             log_card, text="LOG", text_color="#B7B2A6", fg_color=LOG_HEADER_BG,
             corner_radius=10,
-            font=ctk.CTkFont(family="DejaVu Sans", size=10, weight="bold"), anchor="w", height=32,
+            font=ctk.CTkFont(family="Consolas", size=10, weight="bold"), anchor="w", height=32,
         ).pack(fill="x")
         self.log_text = ctk.CTkTextbox(
-            log_card, fg_color=LOG_BG, text_color=LOG_TEXT, font=("Consolas", 11),
+            log_card, fg_color=LOG_BG, text_color=LOG_TEXT, font=("Consolas", 10),
             wrap="word", activate_scrollbars=True, corner_radius=0,
         )
         self.log_text.pack(fill="both", expand=True)
+        self.log_text.tag_config("LVL_DEBUG", foreground=LOG_TEXT_DIM)
+        self.log_text.tag_config("LVL_INFO", foreground=LOG_INFO)
+        self.log_text.tag_config("LVL_OK", foreground=LOG_OK)
+        self.log_text.tag_config("LVL_WARN", foreground=LOG_WARN)
+        self.log_text.tag_config("LVL_ERROR", foreground=LOG_ERROR)
         self.log_text.configure(state="disabled")
 
         # --- Footer ---
@@ -456,11 +581,96 @@ class JoaKAppleGUI(ctk.CTk):
         )
         if path:
             self.csv_path_var.set(path)
+            self._reload_file_list()
 
     def _pick_output_dir(self):
         path = filedialog.askdirectory(title="Selecione a pasta de destino")
         if path:
             self.output_dir_var.set(path)
+
+    # --------------------------------------------------------------- file list
+
+    def _reload_file_list(self):
+        csv_path = self.csv_path_var.get().strip()
+        if not csv_path:
+            self.entries = []
+            self._rebuild_file_list()
+            return
+        try:
+            self.entries = core.load_entries(Path(csv_path))
+        except core.PipelineError as exc:
+            self.entries = []
+            self._rebuild_file_list()
+            messagebox.showerror(APP_TITLE, str(exc))
+            return
+        self._rebuild_file_list()
+
+    def _rebuild_file_list(self):
+        for child in self.file_list_frame.winfo_children():
+            child.destroy()
+        self.rows = {}
+
+        if not self.entries:
+            self.empty_list_label = ctk.CTkLabel(
+                self.file_list_frame,
+                text="Selecione o CSV da Apple para listar os arquivos aqui.",
+                text_color=TEXT_SECONDARY, font=ctk.CTkFont(family="DejaVu Sans", size=12),
+            )
+            self.empty_list_label.pack(pady=40)
+            self.file_count_var.set("Nenhum arquivo carregado")
+            return
+
+        for entry in self.entries:
+            row = FileRow(self.file_list_frame, entry, on_delete=self._delete_entry)
+            row.pack(fill="x", padx=4, pady=(2, 0))
+            separator = ctk.CTkFrame(self.file_list_frame, fg_color=BORDER_SOFT, height=1)
+            separator.pack(fill="x", padx=10, pady=(2, 2))
+            self.rows[entry.file_name] = row
+
+        self.select_all_var.set(True)
+        self.file_count_var.set(f"{len(self.entries)} arquivo(s)")
+
+    def _toggle_select_all(self):
+        value = self.select_all_var.get()
+        for row in self.rows.values():
+            row.selected_var.set(value)
+
+    def _set_rows_enabled(self, enabled: bool):
+        self.select_all_check.configure(state="normal" if enabled else "disabled")
+        for row in self.rows.values():
+            row.set_enabled(enabled)
+
+    def _delete_entry(self, entry: core.FileEntry):
+        if self.worker_thread and self.worker_thread.is_alive():
+            messagebox.showwarning(APP_TITLE, "Aguarde o pipeline atual terminar antes de excluir arquivos.")
+            return
+        output_dir = self.output_dir_var.get().strip()
+        if not output_dir:
+            messagebox.showerror(APP_TITLE, "Selecione a pasta de destino primeiro.")
+            return
+        if not messagebox.askyesno(
+            APP_TITLE,
+            f"Excluir do disco os arquivos já baixados/descriptografados de:\n\n{entry.file_name}\n\n"
+            "Essa ação não pode ser desfeita.",
+        ):
+            return
+
+        removed = core.delete_entry_files(entry, Path(output_dir))
+        entry.status = "pendente"
+        entry.message = ""
+        row = self.rows.get(entry.file_name)
+        if row:
+            row.reset()
+
+        if removed:
+            self.log_queue.put(
+                core.log_line(
+                    "WARN", "arquivo", "removido pelo usuario",
+                    file=entry.file_name, arquivos_removidos=len(removed),
+                )
+            )
+        else:
+            messagebox.showinfo(APP_TITLE, "Nenhum arquivo encontrado em disco para excluir.")
 
     # ------------------------------------------------------------- pipeline
 
@@ -482,13 +692,17 @@ class JoaKAppleGUI(ctk.CTk):
             messagebox.showerror(APP_TITLE, "Selecione ao menos uma etapa (Baixar, Verificar ou Descriptografar).")
             return
 
-        try:
-            self.entries = core.load_entries(Path(csv_path))
-        except core.PipelineError as exc:
-            messagebox.showerror(APP_TITLE, str(exc))
+        if not self.entries:
+            self._reload_file_list()
+        if not self.entries:
             return
 
-        if decrypt_on and any(e.is_encrypted for e in self.entries):
+        selected_entries = [e for e in self.entries if self.rows[e.file_name].selected_var.get()]
+        if not selected_entries:
+            messagebox.showerror(APP_TITLE, "Selecione ao menos um arquivo na lista.")
+            return
+
+        if decrypt_on and any(e.is_encrypted for e in selected_entries):
             if not core.check_gpg_available():
                 messagebox.showerror(
                     APP_TITLE,
@@ -516,15 +730,10 @@ class JoaKAppleGUI(ctk.CTk):
             decrypt=decrypt_on,
         )
 
-        self.tree.delete(*self.tree.get_children())
-        self.row_by_name.clear()
-        for entry in self.entries:
-            row_id = self.tree.insert(
-                "", "end", values=(entry.file_name, STATUS_LABELS["pendente"], "")
-            )
-            self.row_by_name[entry.file_name] = row_id
+        for entry in selected_entries:
+            self.rows[entry.file_name].reset()
 
-        self._total_entries = max(1, len(self.entries))
+        self._total_entries = max(1, len(selected_entries))
         self._done_entries = 0
         self.progress.set(0)
         self.summary_var.set("")
@@ -535,22 +744,26 @@ class JoaKAppleGUI(ctk.CTk):
         )
         for card in self.step_cards.values():
             card.switch.configure(state="disabled")
+        self._set_rows_enabled(False)
 
         self.worker_thread = threading.Thread(
-            target=self._run_worker, args=(config,), daemon=True
+            target=self._run_worker, args=(config, selected_entries), daemon=True
         )
         self.worker_thread.start()
 
-    def _run_worker(self, config: core.PipelineConfig):
+    def _run_worker(self, config: core.PipelineConfig, entries: list[core.FileEntry]):
         def on_update(entry: core.FileEntry) -> None:
             self.update_queue.put(entry)
+
+        def on_progress(entry: core.FileEntry, bytes_done: int, bytes_total: int) -> None:
+            self.update_queue.put(core.ProgressEvent(entry.file_name, bytes_done, bytes_total))
 
         def log(message: str) -> None:
             self.log_queue.put(message)
 
         try:
             summary = core.run_pipeline(
-                config, self.entries, on_update, log, cancel_event=self.cancel_event
+                config, entries, on_update, log, cancel_event=self.cancel_event, on_progress=on_progress
             )
             self.update_queue.put(summary)
         except core.PipelineError as exc:
@@ -561,7 +774,7 @@ class JoaKAppleGUI(ctk.CTk):
     def _cancel(self):
         self.cancel_event.set()
         self.cancel_button.configure(state="disabled")
-        self.log_queue.put("Cancelamento solicitado pelo usuario...")
+        self.log_queue.put(core.log_line("WARN", "usuario", "cancelamento solicitado"))
 
     # ------------------------------------------------------------ polling
 
@@ -585,11 +798,14 @@ class JoaKAppleGUI(ctk.CTk):
         self.after(100, self._poll_queues)
 
     def _handle_update_item(self, item):
-        if isinstance(item, core.FileEntry):
-            row_id = self.row_by_name.get(item.file_name)
-            if row_id:
-                label = STATUS_LABELS.get(item.status, item.status)
-                self.tree.item(row_id, values=(item.file_name, label, item.message))
+        if isinstance(item, core.ProgressEvent):
+            row = self.rows.get(item.file_name)
+            if row:
+                row.update_progress(item.bytes_done, item.bytes_total)
+        elif isinstance(item, core.FileEntry):
+            row = self.rows.get(item.file_name)
+            if row:
+                row.set_status(item.status, item.message)
             if item.status in ("concluido", "hash_invalido", "erro", "cancelado"):
                 self._done_entries += 1
                 self.progress.set(min(1.0, self._done_entries / self._total_entries))
@@ -605,7 +821,7 @@ class JoaKAppleGUI(ctk.CTk):
             if item.erros or item.hash_invalido:
                 messagebox.showwarning(
                     APP_TITLE,
-                    "Pipeline finalizado com pendencias. Veja a coluna Detalhes e o log "
+                    "Pipeline finalizado com pendencias. Veja a coluna Status e o log "
                     "para os arquivos com erro ou hash invalido.",
                 )
             else:
@@ -621,11 +837,14 @@ class JoaKAppleGUI(ctk.CTk):
         )
         for card in self.step_cards.values():
             card.switch.configure(state="normal")
+        self._set_rows_enabled(True)
         self._update_step_state()
 
     def _append_log(self, message: str):
+        match = _LEVEL_TAG_RE.search(message)
+        tag = f"LVL_{match.group(1)}" if match else "LVL_INFO"
         self.log_text.configure(state="normal")
-        self.log_text.insert("end", message + "\n")
+        self.log_text.insert("end", message + "\n", tag)
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
 
@@ -709,7 +928,7 @@ class JoaKAppleGUI(ctk.CTk):
             font=ctk.CTkFont(family="DejaVu Sans", size=13, weight="bold"),
         ).grid(row=7, column=0, columnspan=2, sticky="w", padx=6, pady=(14, 0))
 
-        hash_status_var = tk.StringVar(value="Nenhum arquivo carregado — rode o pipeline (ou carregue um CSV) antes de gerar o termo para preencher volume/quantidade/hashes automaticamente.")
+        hash_status_var = tk.StringVar(value="Nenhum arquivo carregado — selecione o CSV e a pasta de destino antes de gerar o termo para preencher volume/quantidade/hashes automaticamente.")
         ctk.CTkLabel(
             scroll, textvariable=hash_status_var, text_color=TEXT_SECONDARY, wraplength=680,
             justify="left", font=ctk.CTkFont(family="DejaVu Sans", size=11),
@@ -774,9 +993,19 @@ class JoaKAppleGUI(ctk.CTk):
         win.docx_button = docx_button
         win.output_box = output_box
 
+        # As variaveis (volume, hashes, quantidade) so ficam corretas depois que o
+        # calculo em segundo plano termina — o botao fica desabilitado ate la para
+        # nunca gerar o termo com placeholders por engano (ver CHANGELOG).
         entries = self.entries
         output_dir = self.output_dir_var.get().strip()
+        if not entries and self.csv_path_var.get().strip():
+            try:
+                entries = core.load_entries(Path(self.csv_path_var.get().strip()))
+            except core.PipelineError:
+                entries = []
+
         if entries and output_dir:
+            generate_button.configure(state="disabled", text="Calculando hashes…")
             hash_status_var.set("Calculando hashes dos arquivos recebidos…")
             result_queue: queue.Queue = queue.Queue()
             threading.Thread(
@@ -795,6 +1024,7 @@ class JoaKAppleGUI(ctk.CTk):
             return
 
         win.hash_rows = rows
+        win.generate_button.configure(state="normal", text="Gerar termo")
         faltando = [row.file_name for row in rows if row.sha256 is None]
         total_volume = report.humanize_bytes(sum(row.size_bytes for row in rows))
         status = f"{len(rows)} arquivo(s) encontrado(s), volume total {total_volume}."
@@ -841,7 +1071,9 @@ class JoaKAppleGUI(ctk.CTk):
                 copied_formatted = True
             except Exception as exc:  # noqa: BLE001 - nunca deixar a copia quebrar por causa disso
                 self.log_queue.put(
-                    f"[relatorio] Falha ao copiar formatado para o Windows, copiando texto simples: {exc}"
+                    core.log_line(
+                        "WARN", "relatorio", "falha ao copiar formatado, usando texto simples", erro=str(exc)
+                    )
                 )
 
         if not copied_formatted:

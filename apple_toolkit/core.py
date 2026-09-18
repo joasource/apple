@@ -32,6 +32,7 @@ MAX_ATTEMPTS = 4
 RETRY_BACKOFF_SECONDS = 5
 CHUNK_SIZE = 1024 * 1024  # 1 MiB
 GPG_TIMEOUT_SECONDS = 300
+PROGRESS_THROTTLE_SECONDS = 0.2
 
 # Nomes de coluna aceitos no CSV da Apple (variam entre exportacoes/idiomas)
 COLUMN_ALIASES = {
@@ -43,6 +44,39 @@ COLUMN_ALIASES = {
 
 class PipelineError(Exception):
     """Erro fatal que impede o pipeline de iniciar (config invalida, gpg ausente etc.)."""
+
+
+# --------------------------------------------------------------- log estruturado
+
+def _format_size(n: float) -> str:
+    """Formatacao compacta de bytes para uso em campos de log (ex.: 8.54MB)."""
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{int(size)}{unit}" if unit == "B" else f"{size:.2f}{unit}"
+        size /= 1024
+    return f"{size:.2f}TB"
+
+
+def _fmt_field(value) -> str:
+    if isinstance(value, float):
+        text = f"{value:.3f}"
+    else:
+        text = str(value)
+    if not text or any(ch in text for ch in " \t\"="):
+        text = text.replace('"', '\\"')
+        return f'"{text}"'
+    return text
+
+
+def log_line(level: str, component: str, message: str, **fields) -> str:
+    """Monta uma linha de log estruturada: timestamp, nivel, componente, mensagem
+    e campos tecnicos chave=valor (bytes, duracao, velocidade, tentativa, etc.)."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    line = f"{ts} [{level:<5}] {component:<10} {message}"
+    if fields:
+        line += "  " + " ".join(f"{k}={_fmt_field(v)}" for k, v in fields.items())
+    return line
 
 
 def _bundled_gpg_path() -> Optional[Path]:
@@ -89,6 +123,15 @@ class FileEntry:
     @property
     def is_encrypted(self) -> bool:
         return self.file_name.lower().endswith(".gpg")
+
+
+@dataclass
+class ProgressEvent:
+    """Progresso de bytes de um download em andamento (para a barra por arquivo na GUI)."""
+
+    file_name: str
+    bytes_done: int
+    bytes_total: int
 
 
 @dataclass
@@ -200,6 +243,7 @@ def _download(
     dest: Path,
     cancel_event: threading.Event,
     log: Callable[[str], None],
+    on_progress: Optional[Callable[[FileEntry, int, int], None]] = None,
 ) -> bool:
     """Baixa entry.file_link para dest, com retomada em arquivo .part e retries."""
     part_path = dest.with_suffix(dest.suffix + ".part")
@@ -207,11 +251,25 @@ def _download(
     for attempt in range(1, MAX_ATTEMPTS + 1):
         if cancel_event.is_set():
             return False
+        started = time.monotonic()
+        bytes_done = 0
+        last_emit = 0.0
         try:
             with session.get(
                 entry.file_link, stream=True, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)
             ) as response:
                 response.raise_for_status()
+                total_bytes = int(response.headers.get("Content-Length", 0) or 0)
+                log(
+                    log_line(
+                        "INFO", "download", "conexao estabelecida",
+                        file=entry.file_name, tentativa=f"{attempt}/{MAX_ATTEMPTS}",
+                        status_http=response.status_code,
+                        tamanho=_format_size(total_bytes) if total_bytes else "desconhecido",
+                    )
+                )
+                if on_progress:
+                    on_progress(entry, 0, total_bytes)
                 with part_path.open("wb") as fh:
                     for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
                         if cancel_event.is_set():
@@ -220,10 +278,31 @@ def _download(
                             return False
                         if chunk:
                             fh.write(chunk)
+                            bytes_done += len(chunk)
+                            now = time.monotonic()
+                            if on_progress and (now - last_emit) >= PROGRESS_THROTTLE_SECONDS:
+                                on_progress(entry, bytes_done, total_bytes)
+                                last_emit = now
+                if on_progress:
+                    on_progress(entry, bytes_done, total_bytes or bytes_done)
             part_path.replace(dest)
+            duration = max(time.monotonic() - started, 0.001)
+            log(
+                log_line(
+                    "OK", "download", "download concluido",
+                    file=entry.file_name, bytes=bytes_done,
+                    duracao=f"{duration:.2f}s", velocidade=f"{_format_size(bytes_done / duration)}/s",
+                )
+            )
             return True
         except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer falha de rede
-            log(f"[{entry.file_name}] tentativa {attempt}/{MAX_ATTEMPTS} falhou: {exc}")
+            log(
+                log_line(
+                    "WARN", "download", "tentativa falhou",
+                    file=entry.file_name, tentativa=f"{attempt}/{MAX_ATTEMPTS}",
+                    bytes_recebidos=bytes_done, erro=str(exc),
+                )
+            )
             part_path.unlink(missing_ok=True)
             if attempt < MAX_ATTEMPTS:
                 for _ in range(RETRY_BACKOFF_SECONDS * attempt):
@@ -257,6 +336,7 @@ def _decrypt(
         "--decrypt",
         str(encrypted_path),
     ]
+    started = time.monotonic()
     try:
         result = subprocess.run(
             comando,
@@ -264,20 +344,58 @@ def _decrypt(
             capture_output=True,
             timeout=GPG_TIMEOUT_SECONDS,
         )
+        duration = time.monotonic() - started
         if result.returncode != 0:
             stderr = result.stderr.decode("utf-8", errors="replace").strip()
             entry.message = f"gpg falhou: {stderr or 'erro desconhecido'}"
             decrypted_path.unlink(missing_ok=True)
+            log(
+                log_line(
+                    "ERROR", "gpg", "descriptografia falhou",
+                    file=entry.file_name, exit_code=result.returncode,
+                    duracao=f"{duration:.2f}s", stderr=stderr or "erro desconhecido",
+                )
+            )
             return False
+        log(
+            log_line(
+                "OK", "gpg", "descriptografia concluida",
+                file=entry.file_name, exit_code=0, duracao=f"{duration:.2f}s",
+                saida=str(decrypted_path),
+            )
+        )
         return True
     except subprocess.TimeoutExpired:
         entry.message = "gpg excedeu o tempo limite"
         decrypted_path.unlink(missing_ok=True)
+        log(
+            log_line(
+                "ERROR", "gpg", "tempo limite excedido",
+                file=entry.file_name, timeout_s=GPG_TIMEOUT_SECONDS,
+            )
+        )
         return False
     except Exception as exc:  # noqa: BLE001
         entry.message = f"erro ao executar gpg: {exc}"
         decrypted_path.unlink(missing_ok=True)
+        log(log_line("ERROR", "gpg", "erro ao executar processo", file=entry.file_name, erro=str(exc)))
         return False
+
+
+def delete_entry_files(entry: FileEntry, output_dir: Path) -> list[Path]:
+    """Remove do disco os arquivos ja obtidos para ``entry`` (baixado, .part e
+    descriptografado), sem tocar no restante do lote. Retorna os caminhos removidos."""
+    output_dir = Path(output_dir)
+    dest = output_dir / entry.file_name
+    part_path = dest.with_suffix(dest.suffix + ".part")
+    decrypted_path = output_dir / "decriptado" / Path(entry.file_name).stem
+
+    removed: list[Path] = []
+    for path in (dest, part_path, decrypted_path):
+        if path.is_file():
+            path.unlink()
+            removed.append(path)
+    return removed
 
 
 def process_entry(
@@ -287,9 +405,11 @@ def process_entry(
     cancel_event: threading.Event,
     log: Callable[[str], None],
     on_update: Callable[[FileEntry], None],
+    on_progress: Optional[Callable[[FileEntry, int, int], None]] = None,
 ) -> None:
     dest = config.output_dir / entry.file_name
     decrypted_path = config.decrypted_dir / Path(entry.file_name).stem
+    thread_name = threading.current_thread().name
 
     if config.decrypt and entry.is_encrypted and decrypted_path.exists():
         entry.status = "concluido"
@@ -306,26 +426,30 @@ def process_entry(
     if config.download:
         if dest.exists():
             entry.message = "arquivo ja baixado"
+            size = dest.stat().st_size
+            if on_progress:
+                on_progress(entry, size, size)
+            log(log_line("DEBUG", "download", "arquivo ja existe, pulando", file=entry.file_name, bytes=size))
         else:
             entry.status = "baixando"
             on_update(entry)
-            log(f"Iniciando download de {entry.file_name}")
-            ok = _download(session, entry, dest, cancel_event, log)
+            log(log_line("INFO", "download", "iniciando download", file=entry.file_name, thread=thread_name, url=entry.file_link))
+            ok = _download(session, entry, dest, cancel_event, log, on_progress=on_progress)
             if cancel_event.is_set():
                 entry.status = "cancelado"
                 on_update(entry)
+                log(log_line("WARN", "download", "cancelado pelo usuario", file=entry.file_name))
                 return
             if not ok:
                 entry.status = "erro"
                 on_update(entry)
-                log(f"[{entry.file_name}] ERRO: {entry.message}")
+                log(log_line("ERROR", "download", "falha definitiva", file=entry.file_name, motivo=entry.message))
                 return
-            log(f"Download de {entry.file_name} concluido")
     elif not dest.exists():
         entry.status = "erro"
         entry.message = "arquivo nao encontrado (etapa de download desmarcada)"
         on_update(entry)
-        log(f"[{entry.file_name}] ERRO: {entry.message}")
+        log(log_line("ERROR", "download", "arquivo ausente", file=entry.file_name, motivo=entry.message))
         return
 
     # --- verificacao de hash (etapa opcional) ---
@@ -333,36 +457,49 @@ def process_entry(
         if entry.sha256_expected:
             entry.status = "conferindo"
             on_update(entry)
+            hash_started = time.monotonic()
             hash_calculado = sha256_of_file(dest)
+            hash_duration = time.monotonic() - hash_started
             if hash_calculado.lower() != entry.sha256_expected.lower():
                 entry.status = "hash_invalido"
                 entry.message = (
                     f"hash esperado {entry.sha256_expected} != calculado {hash_calculado}"
                 )
                 on_update(entry)
-                log(f"[{entry.file_name}] HASH DIVERGENTE: {entry.message}")
+                log(
+                    log_line(
+                        "ERROR", "hash", "divergencia de integridade",
+                        file=entry.file_name, esperado=entry.sha256_expected,
+                        calculado=hash_calculado, duracao=f"{hash_duration:.2f}s",
+                    )
+                )
                 return
-            log(f"Hash de {entry.file_name} confere")
+            log(
+                log_line(
+                    "OK", "hash", "integridade confirmada",
+                    file=entry.file_name, sha256=hash_calculado, duracao=f"{hash_duration:.2f}s",
+                )
+            )
         else:
-            log(f"[{entry.file_name}] sem hash no CSV, verificacao pulada")
+            log(log_line("DEBUG", "hash", "sem hash no CSV, verificacao pulada", file=entry.file_name))
     else:
-        log(f"[{entry.file_name}] verificacao de hash desmarcada, etapa pulada")
+        log(log_line("DEBUG", "hash", "etapa desmarcada pelo usuario", file=entry.file_name))
 
     # --- descriptografia (etapa opcional) ---
     if config.decrypt and entry.is_encrypted:
         entry.status = "decriptando"
         on_update(entry)
+        log(log_line("INFO", "gpg", "iniciando descriptografia", file=entry.file_name, thread=thread_name))
         ok = _decrypt(entry, dest, decrypted_path, config.passphrase, log)
         if not ok:
             entry.status = "erro"
             on_update(entry)
-            log(f"[{entry.file_name}] ERRO na descriptografia: {entry.message}")
             return
-        log(f"{entry.file_name} descriptografado em {decrypted_path}")
 
     entry.status = "concluido"
     entry.message = entry.message or "ok"
     on_update(entry)
+    log(log_line("OK", "pipeline", "arquivo finalizado", file=entry.file_name, status=entry.status))
 
 
 def run_pipeline(
@@ -371,6 +508,7 @@ def run_pipeline(
     on_update: Callable[[FileEntry], None],
     log: Callable[[str], None],
     cancel_event: Optional[threading.Event] = None,
+    on_progress: Optional[Callable[[FileEntry, int, int], None]] = None,
 ) -> PipelineSummary:
     if cancel_event is None:
         cancel_event = threading.Event()
@@ -391,21 +529,31 @@ def run_pipeline(
     log_lock = threading.Lock()
 
     def safe_log(message: str) -> None:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        line = f"[{timestamp}] {message}"
         with log_lock:
             with config.log_path.open("a", encoding="utf-8") as fh:
-                fh.write(line + "\n")
-        log(line)
+                fh.write(message + "\n")
+        log(message)
+
+    safe_log(
+        log_line(
+            "INFO", "pipeline", "iniciando lote",
+            arquivos=len(entries), workers=max(1, config.max_workers),
+            baixar=config.download, verificar=config.verify, decriptar=config.decrypt,
+        )
+    )
 
     start = time.monotonic()
     session = _make_session()
 
     from concurrent.futures import ThreadPoolExecutor
 
-    with ThreadPoolExecutor(max_workers=max(1, config.max_workers)) as executor:
+    with ThreadPoolExecutor(
+        max_workers=max(1, config.max_workers), thread_name_prefix="worker"
+    ) as executor:
         futures = [
-            executor.submit(process_entry, entry, config, session, cancel_event, safe_log, on_update)
+            executor.submit(
+                process_entry, entry, config, session, cancel_event, safe_log, on_update, on_progress
+            )
             for entry in entries
         ]
         for future in futures:
@@ -427,12 +575,13 @@ def run_pipeline(
             summary.erros += 1
 
     safe_log(
-        "Pipeline finalizado: "
-        f"{summary.concluidos}/{summary.total} concluidos, "
-        f"{summary.hash_invalido} com hash invalido, "
-        f"{summary.erros} com erro, "
-        f"{summary.cancelados} cancelados, "
-        f"em {summary.elapsed_seconds:.1f}s"
+        log_line(
+            "INFO", "pipeline", "lote finalizado",
+            concluidos=f"{summary.concluidos}/{summary.total}",
+            ja_existiam=summary.ja_existiam, hash_invalido=summary.hash_invalido,
+            erros=summary.erros, cancelados=summary.cancelados,
+            duracao=f"{summary.elapsed_seconds:.1f}s",
+        )
     )
 
     return summary

@@ -201,6 +201,54 @@ def test_run_pipeline_requires_passphrase_when_decrypting(tmp_path):
         core.run_pipeline(config, [entry], on_update=lambda e: None, log=lambda s: None)
 
 
+def test_run_pipeline_reports_download_progress(tmp_path):
+    content = b"x" * (5 * 1024 * 1024)
+    entry = core.FileEntry(file_name="grande.bin", file_link="https://example.com/grande.bin", sha256_expected=None)
+    config = core.PipelineConfig(csv_path=tmp_path / "x.csv", output_dir=tmp_path / "out", decrypt=False)
+
+    events: list[tuple[str, int, int]] = []
+
+    def on_progress(entry, bytes_done, bytes_total):
+        events.append((entry.file_name, bytes_done, bytes_total))
+
+    with requests_mock.Mocker() as m:
+        m.get("https://example.com/grande.bin", content=content, headers={"Content-Length": str(len(content))})
+        core.run_pipeline(
+            config, [entry], on_update=lambda e: None, log=lambda s: None, on_progress=on_progress
+        )
+
+    assert events, "esperava pelo menos um evento de progresso"
+    assert all(name == "grande.bin" for name, _, _ in events)
+    assert events[-1][1] == len(content)
+    assert events[-1][2] == len(content)
+
+
+def test_delete_entry_files_removes_downloaded_and_decrypted_copies(tmp_path):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    decrypted_dir = output_dir / "decriptado"
+    decrypted_dir.mkdir()
+
+    (output_dir / "arquivo.txt.gpg").write_bytes(b"cifrado")
+    (decrypted_dir / "arquivo.txt").write_bytes(b"decifrado")
+
+    entry = core.FileEntry(file_name="arquivo.txt.gpg", file_link="https://example.com/x", sha256_expected=None)
+
+    removed = core.delete_entry_files(entry, output_dir)
+
+    assert len(removed) == 2
+    assert not (output_dir / "arquivo.txt.gpg").exists()
+    assert not (decrypted_dir / "arquivo.txt").exists()
+
+
+def test_delete_entry_files_returns_empty_when_nothing_on_disk(tmp_path):
+    entry = core.FileEntry(file_name="fantasma.txt", file_link="https://example.com/x", sha256_expected=None)
+
+    removed = core.delete_entry_files(entry, tmp_path)
+
+    assert removed == []
+
+
 def test_run_pipeline_cancel_stops_before_download(tmp_path):
     entry = core.FileEntry(
         file_name="cancelado.txt", file_link="https://example.com/cancelado.txt", sha256_expected=None

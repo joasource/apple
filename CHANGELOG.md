@@ -4,6 +4,36 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.5.0] - 2026-09-18
+
+### Adicionado
+- Barra de progresso individual por arquivo na lista de downloads, mostrando
+  percentual, bytes baixados/total e velocidade em tempo real (antes só
+  existia a barra agregada do lote inteiro).
+- Lista de arquivos agora tem barra de rolagem própria e uma checkbox por
+  arquivo para selecionar quais processar antes de clicar em "Iniciar" —
+  arquivos desmarcados são ignorados no lote.
+- Botão "Excluir" em cada linha, para apagar do disco (com confirmação) o
+  que já foi baixado/descriptografado daquele arquivo específico, sem sair
+  do programa.
+- Log reformulado com cara de log técnico profissional: timestamp com
+  milissegundos, nível (`DEBUG`/`INFO`/`OK`/`WARN`/`ERROR`) colorido, nome
+  do componente e campos chave=valor (bytes, duração, velocidade, tentativa,
+  thread, exit code do gpg, hash calculado, etc.), em vez de frases soltas.
+
+### Corrigido
+- Geração do Termo de Recebimento podia preencher hashes/volume/quantidade
+  com placeholders mesmo tendo arquivos já baixados em disco: o botão
+  "Gerar termo" ficava clicável antes do cálculo de hash (assíncrono)
+  terminar, e não recarregava a lista de arquivos se o pipeline não tivesse
+  rodado nesta sessão. Agora o botão fica desabilitado ("Calculando
+  hashes…") até o cálculo terminar, e a janela carrega o CSV sozinha
+  quando necessário.
+- Texto padrão do Termo de Recebimento dizia que os hashes eram dos
+  arquivos "contidos nos pacotes compactados (formato ZIP)" — os arquivos
+  que a Apple envia são criptografados em GPG, não compactados em ZIP.
+  Corrigido para "pacotes criptografados (formato GPG)".
+
 ## [1.4.1] - 2026-09-17
 
 ### Corrigido

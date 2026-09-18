@@ -86,7 +86,7 @@ def _summary(data: ReportData) -> tuple[str, str, int]:
 def _hash_description(data: ReportData) -> str:
     return (
         "Os valores de integridade criptográfica (hashes) referentes aos arquivos contidos nos "
-        "pacotes compactados (formato ZIP) foram devidamente ratificados pela respectiva "
+        "pacotes criptografados (formato GPG) foram devidamente ratificados pela respectiva "
         "provedora de aplicação. A referida documentação técnica encontra-se encartada aos "
         f"autos do procedimento {data.procedimento_referenciado or '[PROCEDIMENTO REFERENCIADO]'}, "
         f"sob o ID de documento {data.id_documento or '[ID DO DOCUMENTO]'}."
