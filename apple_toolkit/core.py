@@ -127,11 +127,13 @@ class FileEntry:
 
 @dataclass
 class ProgressEvent:
-    """Progresso de bytes de um download em andamento (para a barra por arquivo na GUI)."""
+    """Progresso de bytes de uma etapa em andamento (download ou verificacao de hash),
+    para a barra por arquivo na GUI/CLI."""
 
     file_name: str
     bytes_done: int
     bytes_total: int
+    phase: str = "download"  # "download" | "hash"
 
 
 def format_eta(seconds: float) -> str:
@@ -278,14 +280,27 @@ def load_entries(csv_path: Path) -> list[FileEntry]:
     return entries
 
 
-def sha256_of_file(path: Path) -> str:
+def sha256_of_file(
+    path: Path, on_progress: Optional[Callable[[int, int], None]] = None
+) -> str:
     hasher = hashlib.sha256()
+    total = path.stat().st_size
+    bytes_done = 0
+    last_emit = 0.0
     with path.open("rb") as fh:
         while True:
             data = fh.read(CHUNK_SIZE)
             if not data:
                 break
             hasher.update(data)
+            bytes_done += len(data)
+            if on_progress:
+                now = time.monotonic()
+                if now - last_emit >= PROGRESS_THROTTLE_SECONDS:
+                    on_progress(bytes_done, total)
+                    last_emit = now
+    if on_progress:
+        on_progress(bytes_done, total)  # evento final, garante 100%
     return hasher.hexdigest()
 
 
@@ -309,7 +324,7 @@ def _download(
     dest: Path,
     cancel_event: threading.Event,
     log: Callable[[str], None],
-    on_progress: Optional[Callable[[FileEntry, int, int], None]] = None,
+    on_progress: Optional[Callable[[FileEntry, int, int, str], None]] = None,
 ) -> bool:
     """Baixa entry.file_link para dest, com retomada em arquivo .part e retries."""
     part_path = dest.with_suffix(dest.suffix + ".part")
@@ -335,7 +350,7 @@ def _download(
                     )
                 )
                 if on_progress:
-                    on_progress(entry, 0, total_bytes)
+                    on_progress(entry, 0, total_bytes, "download")
                 with part_path.open("wb") as fh:
                     for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
                         if cancel_event.is_set():
@@ -347,10 +362,10 @@ def _download(
                             bytes_done += len(chunk)
                             now = time.monotonic()
                             if on_progress and (now - last_emit) >= PROGRESS_THROTTLE_SECONDS:
-                                on_progress(entry, bytes_done, total_bytes)
+                                on_progress(entry, bytes_done, total_bytes, "download")
                                 last_emit = now
                 if on_progress:
-                    on_progress(entry, bytes_done, total_bytes or bytes_done)
+                    on_progress(entry, bytes_done, total_bytes or bytes_done, "download")
             part_path.replace(dest)
             duration = max(time.monotonic() - started, 0.001)
             log(
@@ -471,7 +486,7 @@ def process_entry(
     cancel_event: threading.Event,
     log: Callable[[str], None],
     on_update: Callable[[FileEntry], None],
-    on_progress: Optional[Callable[[FileEntry, int, int], None]] = None,
+    on_progress: Optional[Callable[[FileEntry, int, int, str], None]] = None,
 ) -> None:
     dest = config.output_dir / entry.file_name
     decrypted_path = config.decrypted_dir / Path(entry.file_name).stem
@@ -494,7 +509,7 @@ def process_entry(
             entry.message = "arquivo ja baixado"
             size = dest.stat().st_size
             if on_progress:
-                on_progress(entry, size, size)
+                on_progress(entry, size, size, "download")
             log(log_line("DEBUG", "download", "arquivo ja existe, pulando", file=entry.file_name, bytes=size))
         else:
             entry.status = "baixando"
@@ -524,7 +539,12 @@ def process_entry(
             entry.status = "conferindo"
             on_update(entry)
             hash_started = time.monotonic()
-            hash_calculado = sha256_of_file(dest)
+            hash_progress = (
+                (lambda done, total: on_progress(entry, done, total, "hash"))
+                if on_progress
+                else None
+            )
+            hash_calculado = sha256_of_file(dest, on_progress=hash_progress)
             hash_duration = time.monotonic() - hash_started
             if hash_calculado.lower() != entry.sha256_expected.lower():
                 entry.status = "hash_invalido"
@@ -574,7 +594,7 @@ def run_pipeline(
     on_update: Callable[[FileEntry], None],
     log: Callable[[str], None],
     cancel_event: Optional[threading.Event] = None,
-    on_progress: Optional[Callable[[FileEntry, int, int], None]] = None,
+    on_progress: Optional[Callable[[FileEntry, int, int, str], None]] = None,
 ) -> PipelineSummary:
     if cancel_event is None:
         cancel_event = threading.Event()

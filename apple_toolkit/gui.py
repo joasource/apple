@@ -27,7 +27,7 @@ import report
 
 APP_TITLE = "JoaKApple"
 APP_DESCRIPTION = "Toolkit para baixar, verificar e descriptografar retorno de ofícios judiciais da Apple"
-APP_VERSION = "1.7.1"
+APP_VERSION = "1.7.2"
 AUTHOR_LINE = "Joaquim Ferreira Silva Neto  ·  joaquimfsneto@gmail.com"
 
 
@@ -276,10 +276,11 @@ class FileRow(ctk.CTkFrame):
         self.status_label.configure(text_color=TEXT_SECONDARY)
         self._tracker = core.ProgressTracker()
 
-    def update_progress(self, bytes_done: int, bytes_total: int):
+    def update_progress(self, bytes_done: int, bytes_total: int, phase: str = "download"):
         estimate = self._tracker.update(bytes_done, bytes_total)
         speed = estimate.speed_bps
         speed_text = f"{report.humanize_bytes(speed)}/s" if speed > 0 else "calculando velocidade…"
+        verb = "Baixando" if phase == "download" else "Conferindo hash"
 
         if bytes_total > 0:
             self.progress.stop()
@@ -289,13 +290,13 @@ class FileRow(ctk.CTkFrame):
             pct = int(fraction * 100)
             eta_text = core.format_eta(estimate.eta_seconds) if estimate.eta_seconds is not None else "--:--"
             self.status_var.set(
-                f"Baixando {pct}%  ·  {report.humanize_bytes(bytes_done)}/{report.humanize_bytes(bytes_total)}"
+                f"{verb} {pct}%  ·  {report.humanize_bytes(bytes_done)}/{report.humanize_bytes(bytes_total)}"
                 f"  ·  {speed_text}  ·  ETA {eta_text}"
             )
         else:
             self.progress.configure(mode="indeterminate")
             self.progress.start()
-            self.status_var.set(f"Baixando  ·  {report.humanize_bytes(bytes_done)}  ·  {speed_text}")
+            self.status_var.set(f"{verb}  ·  {report.humanize_bytes(bytes_done)}  ·  {speed_text}")
         self.status_label.configure(text_color=ACCENT)
 
     def set_status(self, status: str, message: str = ""):
@@ -777,8 +778,8 @@ class JoaKAppleGUI(ctk.CTk):
         def on_update(entry: core.FileEntry) -> None:
             self.update_queue.put(entry)
 
-        def on_progress(entry: core.FileEntry, bytes_done: int, bytes_total: int) -> None:
-            self.update_queue.put(core.ProgressEvent(entry.file_name, bytes_done, bytes_total))
+        def on_progress(entry: core.FileEntry, bytes_done: int, bytes_total: int, phase: str = "download") -> None:
+            self.update_queue.put(core.ProgressEvent(entry.file_name, bytes_done, bytes_total, phase=phase))
 
         def log(message: str) -> None:
             self.log_queue.put(message)
@@ -823,9 +824,10 @@ class JoaKAppleGUI(ctk.CTk):
         if isinstance(item, core.ProgressEvent):
             row = self.rows.get(item.file_name)
             if row:
-                row.update_progress(item.bytes_done, item.bytes_total)
-            self._file_progress[item.file_name] = item
-            self._update_aggregate_summary()
+                row.update_progress(item.bytes_done, item.bytes_total, phase=item.phase)
+            if item.phase == "download":
+                self._file_progress[item.file_name] = item
+                self._update_aggregate_summary()
         elif isinstance(item, core.FileEntry):
             row = self.rows.get(item.file_name)
             if row:

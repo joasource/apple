@@ -190,11 +190,15 @@ class TerminalReporter:
             print(text)
             self._redraw_locked()
 
-    def on_progress(self, entry: core.FileEntry, bytes_done: int, bytes_total: int) -> None:
+    def on_progress(
+        self, entry: core.FileEntry, bytes_done: int, bytes_total: int, phase: str = "download"
+    ) -> None:
         if self.quiet:
             return
         with self._lock:
-            self.file_progress[entry.file_name] = core.ProgressEvent(entry.file_name, bytes_done, bytes_total)
+            self.file_progress[entry.file_name] = core.ProgressEvent(
+                entry.file_name, bytes_done, bytes_total, phase=phase
+            )
             self._redraw_locked()
 
     def on_update(self, entry: core.FileEntry) -> None:
@@ -231,6 +235,7 @@ class TerminalReporter:
         for name, ev in self.file_progress.items():
             tracker = self._trackers.setdefault(name, core.ProgressTracker())
             estimate = tracker.update(ev.bytes_done, ev.bytes_total)
+            verb = "baixando" if ev.phase == "download" else "conferindo hash"
             if ev.bytes_total > 0:
                 pct = int(min(1.0, ev.bytes_done / ev.bytes_total) * 100)
                 speed_text = (
@@ -238,13 +243,16 @@ class TerminalReporter:
                 )
                 eta_text = core.format_eta(estimate.eta_seconds) if estimate.eta_seconds is not None else "--:--"
                 lines.append(
-                    f"  {name}: {pct}%  {report.humanize_bytes(ev.bytes_done)}/{report.humanize_bytes(ev.bytes_total)}"
+                    f"  {name}: {verb} {pct}%  {report.humanize_bytes(ev.bytes_done)}/{report.humanize_bytes(ev.bytes_total)}"
                     f"  ·  {speed_text}  ·  ETA {eta_text}"
                 )
             else:
-                lines.append(f"  {name}: {report.humanize_bytes(ev.bytes_done)}  ·  baixando…")
+                lines.append(f"  {name}: {report.humanize_bytes(ev.bytes_done)}  ·  {verb}…")
 
-        agg = core.aggregate_progress(self.file_progress, self.start_time)
+        # Agregado do lote so soma progresso de download — hash e' rapido/local e
+        # misturar os dois faria a barra agregada "voltar" quando a fase muda.
+        download_progress = {name: ev for name, ev in self.file_progress.items() if ev.phase == "download"}
+        agg = core.aggregate_progress(download_progress, self.start_time)
         pct_files = int(round(self.done_entries / self.total_entries * 100))
         parts = [f"Progresso: {self.done_entries}/{self.total_entries} arquivos ({pct_files}%)"]
         if agg["bytes_known"] > 0:

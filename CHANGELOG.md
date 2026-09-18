@@ -4,6 +4,15 @@ Histórico de versões do JoaKApple. Formato baseado no
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as versões
 seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.7.2] - 2026-09-18
+
+### Adicionado
+- Progresso ao vivo (percentual, bytes, velocidade e ETA) também durante a
+  verificação de hash, na mesma linha/barra por arquivo que já mostrava o
+  download — antes essa etapa só mostrava "Conferindo hash..." parado,
+  sem nenhum número. Vale pra GUI e pro modo `--no-gui` (Linux). Não
+  entra no agregado do topo/lote (só download conta pra aquele total).
+
 ## [1.7.1] - 2026-09-18
 
 ### Corrigido

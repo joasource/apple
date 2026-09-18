@@ -294,7 +294,7 @@ def test_run_pipeline_reports_download_progress(tmp_path):
 
     events: list[tuple[str, int, int]] = []
 
-    def on_progress(entry, bytes_done, bytes_total):
+    def on_progress(entry, bytes_done, bytes_total, phase="download"):
         events.append((entry.file_name, bytes_done, bytes_total))
 
     with requests_mock.Mocker() as m:
@@ -307,6 +307,62 @@ def test_run_pipeline_reports_download_progress(tmp_path):
     assert all(name == "grande.bin" for name, _, _ in events)
     assert events[-1][1] == len(content)
     assert events[-1][2] == len(content)
+
+
+def test_sha256_of_file_reports_progress(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "CHUNK_SIZE", 4)
+    monkeypatch.setattr(core, "PROGRESS_THROTTLE_SECONDS", 0)
+    content = b"conteudo de teste para hash com progresso"
+    path = tmp_path / "arquivo.bin"
+    path.write_bytes(content)
+
+    events: list[tuple[int, int]] = []
+    digest = core.sha256_of_file(path, on_progress=lambda done, total: events.append((done, total)))
+
+    assert digest == hashlib.sha256(content).hexdigest()
+    assert events, "esperava pelo menos um evento de progresso"
+    assert all(total == len(content) for _, total in events)
+    assert events[-1][0] == len(content)
+
+
+def test_sha256_of_file_without_callback_still_works(tmp_path):
+    content = b"sem callback nenhum"
+    path = tmp_path / "arquivo.bin"
+    path.write_bytes(content)
+
+    assert core.sha256_of_file(path) == hashlib.sha256(content).hexdigest()
+
+
+def test_run_pipeline_reports_hash_progress_as_separate_phase(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "PROGRESS_THROTTLE_SECONDS", 0)
+    content = b"y" * (2 * 1024 * 1024)
+    sha = hashlib.sha256(content).hexdigest()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (output_dir / "existente.bin").write_bytes(content)
+    entry = core.FileEntry(
+        file_name="existente.bin", file_link="https://example.com/nao-usado", sha256_expected=sha
+    )
+    config = core.PipelineConfig(
+        csv_path=tmp_path / "x.csv", output_dir=output_dir, download=False, decrypt=False
+    )
+
+    events: list[tuple[str, int, int, str]] = []
+
+    def on_progress(entry, bytes_done, bytes_total, phase="download"):
+        events.append((entry.file_name, bytes_done, bytes_total, phase))
+
+    summary = core.run_pipeline(
+        config, [entry], on_update=lambda e: None, log=lambda s: None, on_progress=on_progress
+    )
+
+    assert summary.concluidos == 1
+    hash_events = [e for e in events if e[3] == "hash"]
+    assert hash_events, "esperava eventos de progresso de fase 'hash'"
+    assert all(e[0] == "existente.bin" for e in hash_events)
+    assert hash_events[-1][1] == len(content)
+    assert hash_events[-1][2] == len(content)
+    assert not any(e[3] == "download" for e in events)  # download desligado, so hash roda
 
 
 def test_delete_entry_files_removes_downloaded_and_decrypted_copies(tmp_path):
